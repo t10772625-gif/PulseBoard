@@ -296,18 +296,22 @@ label {
     animation: none;
   }
 }
+/* App shell: the viewport never scrolls; only .main (and .side-scroll if needed) do */
 .app {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 .side {
   width: 250px;
   flex-shrink: 0;
   background: var(--side);
   color: #fff;
-  position: sticky;
-  top: 0;
-  height: 100vh;
+  position: relative;
+  /* Above the sticky topbar (.bar, z-index 5) so the collapse toggle isn't clipped */
+  z-index: 10;
+  height: 100%;
   transition: width 0.2s;
 }
 .side-scroll {
@@ -324,7 +328,8 @@ label {
 }
 .side-collapse {
   position: absolute;
-  top: 26px;
+  /* Centered on the topbar's bottom border; --bar-h is measured in Sidebar.tsx */
+  top: calc(var(--bar-h, 64px) - 14px);
   right: -14px;
   width: 28px;
   height: 28px;
@@ -355,9 +360,16 @@ label {
   gap: 2px;
 }
 .side small {
+  display: block;
   padding: 18px 24px 6px;
   color: #7f96aa;
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.side .logo + small {
+  padding-top: 6px;
 }
 .side.collapsed {
   width: 76px;
@@ -367,24 +379,70 @@ label {
   justify-content: center;
 }
 .side.collapsed .logo-text,
-.side.collapsed small,
-.side.collapsed .plist,
 .side.collapsed .who,
-.side.collapsed .logout-btn,
+.side.collapsed .logout-text,
 .side.collapsed .nav-label,
-.side.collapsed .nav b {
+.side.collapsed .nav b:not(.nav-count) {
   display: none;
 }
-.side.collapsed .side-collapse {
-  margin-left: 0;
+/* Section labels become thin dividers when collapsed */
+.side.collapsed small {
+  font-size: 0;
+  padding: 0;
+  margin: 12px 22px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.side.collapsed .logo + small {
+  margin-top: 4px;
 }
 .side.collapsed .nav {
   justify-content: center;
 }
+/* Unread count shrinks to a dot on the icon */
+.side.collapsed .nav-count {
+  position: absolute;
+  top: 7px;
+  left: calc(50% + 5px);
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  font-size: 0;
+  border: 2px solid var(--side);
+  box-sizing: content-box;
+}
 .side.collapsed .me {
-  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 0;
+}
+.logout-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 8px;
+}
+.logout-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+.side-tip {
+  position: fixed;
+  transform: translateY(-50%);
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  box-shadow: var(--sh);
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 20;
 }
 .nav {
+  position: relative;
   display: flex;
   gap: 11px;
   align-items: center;
@@ -406,7 +464,10 @@ label {
 .nav i {
   font-style: normal;
   width: 20px;
-  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 .nav b {
   margin-left: auto;
@@ -476,6 +537,9 @@ label {
 .main {
   flex: 1;
   min-width: 0;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .bar {
   display: flex;
@@ -1370,11 +1434,30 @@ label {
   }
   .app {
     flex-direction: column;
+    height: auto;
+    overflow: visible;
   }
-  .side {
+  .main {
+    height: auto;
+    overflow: visible;
+  }
+  .side,
+  .side.collapsed {
     width: 100%;
     height: auto;
     position: static;
+  }
+  /* Collapse is desktop-only; ignore a saved collapsed preference on mobile */
+  .side.collapsed .nav-label,
+  .side.collapsed .logout-text {
+    display: inline;
+  }
+  .side.collapsed .logo-text {
+    display: block;
+  }
+  .side.collapsed .me {
+    flex-direction: row;
+    padding: 8px 16px;
   }
   .side-collapse {
     display: none;
