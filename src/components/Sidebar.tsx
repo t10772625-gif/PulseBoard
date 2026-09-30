@@ -1,26 +1,55 @@
 "use client";
 import { useEffect, useState, type MouseEvent, type FocusEvent } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { FolderKanban, Inbox, LayoutDashboard, LogOut, PanelLeftClose, PanelLeftOpen, Sun, Users, type LucideIcon } from "lucide-react";
+import { usePathname } from "next/navigation";
+import {
+  Archive,
+  BarChart3,
+  Briefcase,
+  FolderKanban,
+  Inbox,
+  LayoutDashboard,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plug,
+  Sparkles,
+  Sun,
+  Users,
+  Workflow,
+  type LucideIcon,
+} from "lucide-react";
 import { useStore, health } from "@/lib/store";
+import { pagePermissionFor } from "@/lib/permissions";
 import { ProjectId } from "@/types";
 import { Avatar } from "./ui";
 
-const NAV: { href: string; icon: LucideIcon; label: string; match: string }[] = [
-  { href: "/dashboard", icon: LayoutDashboard, label: "Home", match: "/dashboard" },
-  { href: "/projects", icon: FolderKanban, label: "Projects", match: "/projects" },
-  { href: "/day", icon: Sun, label: "My Day", match: "/day" },
-  { href: "/inbox", icon: Inbox, label: "Inbox", match: "/inbox" },
-  { href: "/team", icon: Users, label: "Team", match: "/team" },
+type NavItem = { href: string; icon: LucideIcon; label: string; ur: string; match: string };
+
+const NAV: NavItem[] = [
+  { href: "/dashboard", icon: LayoutDashboard, label: "Home", ur: "ہوم", match: "/dashboard" },
+  { href: "/projects", icon: FolderKanban, label: "Projects", ur: "پروجیکٹس", match: "/projects" },
+  { href: "/day", icon: Sun, label: "My Day", ur: "میرا دن", match: "/day" },
+  { href: "/inbox", icon: Inbox, label: "Inbox", ur: "ان باکس", match: "/inbox" },
+  { href: "/team", icon: Users, label: "Team", ur: "ٹیم", match: "/team" },
+];
+
+const WORKSPACE: NavItem[] = [
+  { href: "/ai", icon: Sparkles, label: "AI assistant", ur: "اے آئی", match: "/ai" },
+  { href: "/analytics", icon: BarChart3, label: "Analytics", ur: "تجزیہ", match: "/analytics" },
+  { href: "/clients", icon: Briefcase, label: "Clients", ur: "کلائنٹس", match: "/clients" },
+  { href: "/automations", icon: Workflow, label: "Automations", ur: "آٹومیشن", match: "/automations" },
+  { href: "/integrations", icon: Plug, label: "Integrations", ur: "انٹیگریشنز", match: "/integrations" },
+  { href: "/archive", icon: Archive, label: "Archive", ur: "آرکائیو", match: "/archive" },
 ];
 
 type Tip = { label: string; top: number; left: number };
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const { tasks, notifications, logout, projects } = useStore();
+  const { tasks, notifications, projects, language, allowed, members, viewAsRole, workspaceName } = useStore();
+  // RBAC: only show pages this role may open
+  const visible = (n: NavItem) => { const p = pagePermissionFor(n.href); return !p || allowed(p); };
+  const me = members.me;
   const unread = notifications.filter((n) => n.unread).length;
   const [collapsed, setCollapsed] = useState(false);
   // Rendered position: fixed so .side-scroll's overflow doesn't clip it
@@ -67,6 +96,20 @@ export default function Sidebar() {
     return { onMouseEnter: show, onFocus: show, onMouseLeave: hide, onBlur: hide };
   }
 
+  function renderItem(n: NavItem) {
+    const Icon = n.icon;
+    const label = language === "ur" ? n.ur : n.label;
+    return (
+      <Link key={n.href} href={n.href} className={`nav ${pathname.startsWith(n.match) ? "on" : ""}`} aria-label={n.label} {...tipProps(label)}>
+        <i>
+          <Icon size={18} strokeWidth={2} />
+        </i>
+        <span className="nav-label">{label}</span>
+        {n.href === "/inbox" && unread > 0 && <b className="nav-count">{unread}</b>}
+      </Link>
+    );
+  }
+
   return (
     <aside className={`side ${collapsed ? "collapsed" : ""}`}>
       <button className="side-collapse" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={toggleCollapsed}>
@@ -77,23 +120,12 @@ export default function Sidebar() {
           <b></b>
           <span className="logo-text">PulseBoard</span>
         </div>
-        <small>Main</small>
-        <nav id="mn">
-          {NAV.map((n) => {
-            const Icon = n.icon;
-            return (
-              <Link key={n.href} href={n.href} className={`nav ${pathname.startsWith(n.match) ? "on" : ""}`} aria-label={n.label} {...tipProps(n.label)}>
-                <i>
-                  <Icon size={18} strokeWidth={2} />
-                </i>
-                <span className="nav-label">{n.label}</span>
-                {n.href === "/inbox" && unread > 0 && <b className="nav-count">{unread}</b>}
-              </Link>
-            );
-          })}
-        </nav>
-        <small>Projects</small>
-        <nav className="plist">
+        <small>{language === "ur" ? "مین" : "Main"}</small>
+        <nav id="mn">{NAV.filter(visible).map(renderItem)}</nav>
+        {WORKSPACE.some(visible) && <small>{language === "ur" ? "ورک اسپیس" : "Workspace"}</small>}
+        <nav>{WORKSPACE.filter(visible).map(renderItem)}</nav>
+        {allowed("page.projects") && <small>{language === "ur" ? "پروجیکٹس" : "Projects"}</small>}
+        <nav className="plist" hidden={!allowed("page.projects")}>
           {(Object.keys(projects) as ProjectId[]).map((k) => {
             const h = health(k, tasks);
             const active = pathname === `/projects/${k}`;
@@ -107,26 +139,16 @@ export default function Sidebar() {
           })}
         </nav>
         <div className="me">
-          <span {...tipProps("Ali Raza")} style={{ display: "inline-flex" }}>
+          <span {...tipProps(me?.name ?? "You")} style={{ display: "inline-flex" }}>
             <Avatar id="me" />
           </span>
-          <span className="who" style={{ flex: 1 }}>
-            <b style={{ display: "block" }}>Ali Raza</b>
-            <span style={{ color: "#7F96AA" }}>Workspace owner</span>
-          </span>
-          <button
-            className="logout-btn"
-            aria-label="Log out"
-            style={{ color: "#BFD0DD", fontSize: 12 }}
-            {...tipProps("Log out")}
-            onClick={() => {
-              logout();
-              router.push("/login");
-            }}
-          >
-            <LogOut size={15} />
-            <span className="logout-text">Log out</span>
-          </button>
+          <Link href="/profile" className="who" style={{ flex: 1, minWidth: 0, color: "inherit" }} aria-label="Your profile">
+            <b style={{ display: "block" }}>{me?.name ?? "You"}</b>
+            <span style={{ color: "#7F96AA" }}>
+              {me?.role ?? "Member"}
+              {viewAsRole !== me?.role && ` · viewing as ${viewAsRole}`} · {workspaceName}
+            </span>
+          </Link>
         </div>
       </div>
       {collapsed && tip && (

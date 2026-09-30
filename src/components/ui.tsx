@@ -1,15 +1,53 @@
-import { CSSProperties } from "react";
+import { CSSProperties, ReactNode } from "react";
 import { Health, MemberId, Priority, Task } from "@/types";
 import { PRIORITY_LABEL, dateForOffset } from "@/lib/mock-data";
 import { useStore } from "@/lib/store";
 
 export function Avatar({ id, ring, large }: { id: MemberId; ring?: boolean; large?: boolean }) {
   const { members } = useStore();
-  const m = members[id];
+  // A removed member (or a stale id) still renders instead of crashing
+  const m = members[id] ?? { name: "Former member", initials: "?", colorClass: "c4" as const };
   return (
     <span className={`av ${m.colorClass} ${ring ? "ring" : ""} ${large ? "lg" : ""}`} title={m.name}>
       {m.initials}
     </span>
+  );
+}
+
+// On/off control styled to match the app (use instead of a bare checkbox for settings)
+export function Switch({ checked, onChange, disabled, label }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={checked} aria-label={label} className={`switch ${checked ? "on" : ""}`} disabled={disabled} onClick={() => onChange(!checked)}>
+      <i />
+    </button>
+  );
+}
+
+// A settings row: title + optional hint on the left, control on the right
+export function SettingRow({ title, hint, children }: { title: React.ReactNode; hint?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="setting-row">
+      <div>
+        <b>{title}</b>
+        {hint && <p className="mute">{hint}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// Shown when a list has nothing to show yet (new workspace, filters, missing item)
+export function EmptyState({ title, message, action }: { title: string; message?: string; action?: ReactNode }) {
+  return (
+    <div className="empty-state" role="status">
+      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+        <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+      </svg>
+      <b>{title}</b>
+      {message && <p className="mute">{message}</p>}
+      {action}
+    </div>
   );
 }
 

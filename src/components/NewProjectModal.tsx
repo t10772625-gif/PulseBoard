@@ -3,10 +3,11 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { PROJECT_COLOR_PRESETS } from "@/lib/mock-data";
+import { PLANS } from "@/lib/plans";
 import Modal from "./Modal";
 
 export default function NewProjectModal() {
-  const { newProjectOpen, closeNewProjectModal, addProject, toast } = useStore();
+  const { newProjectOpen, closeNewProjectModal, addProject, toast, projects, plan } = useStore();
   const router = useRouter();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -18,6 +19,8 @@ export default function NewProjectModal() {
     e.preventDefault();
     const v = name.trim();
     if (!v) return toast("Enter a project name first");
+    // Plan limit: Free allows 1 project
+    if (Object.keys(projects).length >= PLANS[plan].boards) return toast(`The ${PLANS[plan].name} plan allows ${PLANS[plan].boards} project. Upgrade to Pro for unlimited projects.`);
     const { color, gradient } = PROJECT_COLOR_PRESETS[preset];
     const id = addProject(v, description.trim(), color, gradient);
     toast("Project created");

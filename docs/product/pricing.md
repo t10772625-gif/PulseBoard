@@ -7,7 +7,17 @@ estimates, revenue projections, and go-to-market plan.
 Features are referenced by their IDs from [feature-audit.md](./feature-audit.md)
 (e.g. `AI-01` = Smart Matching).
 
-> **Status:** Draft. Two options are documented; one needs to be chosen.
+> **Decision (final):** Option 2 prices with **no Enterprise tier**.
+>
+> | Tier | Price | Includes | Limits |
+> | ---- | ----- | -------- | ------ |
+> | Free | $0 | Basic core only (boards, tasks, subtasks, checklists, comments, attachments, bulk actions, shortcuts, CSV, templates, dark mode) | Unlimited users, **1 project**, 1 GB, no AI |
+> | Pro | $12/user/mo | Free + AI features, all views, analytics, all integrations, real email notifications, client view-only | Unlimited projects, 5 GB, 200 AI actions/user/mo, priority support |
+> | Legendary | $18/user/mo | Pro + Smart Matching, Workload Balancing, planning & insights, agency features, white-label, custom domain, audit export, backup/restore, advanced permissions | 10 GB, 1,000 AI actions/user/mo, 24/7 support |
+>
+> The feature → tier mapping in code is `src/lib/plans.ts`. The rest of this doc is the earlier analysis.
+
+> **Status (earlier):** Draft. Two options are documented; one needs to be chosen.
 >
 > The owner's direction is to gate features by tier rather than giving
 > everything away free:

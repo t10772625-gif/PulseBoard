@@ -6,11 +6,13 @@ import { Task } from "@/types";
 import { Avatar, DueLabel } from "./ui";
 
 export default function TaskCard({ task }: { task: Task }) {
-  const { tasks, openDrawer, deleteTask, toast } = useStore();
+  const { tasks, openDrawer, deleteTask, selectedIds, toggleSelect, canEdit, allowed } = useStore();
   const blocked = isBlocked(task, tasks);
   const doneSubs = task.subtasks.filter((s) => s[1]).length;
   const subtaskIcon = doneSubs === 0 ? "☐" : doneSubs === task.subtasks.length ? "☑" : "◐";
   const showProgress = task.status === "prog" && task.subtasks.length > 0;
+  const selected = selectedIds.includes(task.id);
+  const checklist = task.checklist ?? [];
 
   function onDragStart(e: DragEvent<HTMLDivElement>) {
     e.dataTransfer.setData("text/plain", task.id);
@@ -20,30 +22,43 @@ export default function TaskCard({ task }: { task: Task }) {
     e.currentTarget.classList.remove("dragging");
   }
 
-  function onDelete(e: React.MouseEvent) {
-    e.stopPropagation();
-    if (!window.confirm(`Delete "${task.title}"? This cannot be undone.`)) return;
-    deleteTask(task.id);
-    toast("Task deleted");
-  }
-
   return (
     <div
-      className={`task ${task.priority}`}
-      draggable
+      className={`task ${task.priority} ${selected ? "sel" : ""} ${selectedIds.length ? "selecting" : ""}`}
+      draggable={canEdit}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      onClick={() => openDrawer(task.id)}
+      onClick={(e) => (e.shiftKey || selectedIds.length ? toggleSelect(task.id) : openDrawer(task.id))}
     >
       <div className="meta">
         <div className="lb">
+          {canEdit && (
+            <input
+              type="checkbox"
+              className="task-check"
+              aria-label={`Select ${task.title}`}
+              checked={selected}
+              onClick={(e) => e.stopPropagation()}
+              onChange={() => toggleSelect(task.id)}
+            />
+          )}
           {task.labels.map((l) => (
             <span key={l}>{l}</span>
           ))}
         </div>
-        <button className="task-delete" aria-label={`Delete ${task.title}`} title="Delete task" onClick={onDelete}>
-          <Trash2 size={14} />
-        </button>
+        {allowed("task.delete") && (
+          <button
+            className="task-delete"
+            aria-label={`Delete ${task.title}`}
+            title="Delete task (undo available)"
+            onClick={(e) => {
+              e.stopPropagation();
+              deleteTask(task.id);
+            }}
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
       </div>
       <p>{task.title}</p>
       {showProgress && (
@@ -59,6 +74,22 @@ export default function TaskCard({ task }: { task: Task }) {
               {subtaskIcon} {doneSubs}/{task.subtasks.length}
             </span>
           )}
+          {checklist.length > 0 && (
+            <span className="due" title="Checklist">
+              ✔ {checklist.filter((c) => c[1]).length}/{checklist.length}
+            </span>
+          )}
+          {task.recurrence && task.recurrence !== "none" && (
+            <span className="due" title={`Repeats ${task.recurrence}`}>
+              🔁
+            </span>
+          )}
+          {task.energy && (
+            <span className="due" title={`${task.energy} energy`}>
+              {task.energy === "high" ? "⚡" : "🌙"}
+            </span>
+          )}
+          {task.approval === "requested" && <span className="due" title="Waiting for client approval">⏳ Approval</span>}
           {blocked && <span className="lock"> 🔒 Blocked</span>}
         </span>
         <Avatar id={task.assignee} />

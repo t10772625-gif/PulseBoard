@@ -2,10 +2,10 @@
 import { useRouter } from "next/navigation";
 import { useStore, health } from "@/lib/store";
 import { ProjectId } from "@/types";
-import { Avatar, Ecg, HealthBreakdown } from "@/components/ui";
+import { Avatar, Ecg, EmptyState, HealthBreakdown } from "@/components/ui";
 
 export default function Projects() {
-  const { tasks, projects, openNewProjectModal } = useStore();
+  const { tasks, projects, openNewProjectModal, allowed } = useStore();
   const router = useRouter();
   const ids = Object.keys(projects) as ProjectId[];
 
@@ -18,11 +18,26 @@ export default function Projects() {
             {ids.length} active project{ids.length === 1 ? "" : "s"} in your workspace
           </p>
         </div>
-        <button className="btn" onClick={openNewProjectModal}>
-          ＋ New project
-        </button>
+        {allowed("project.manage") && (
+          <button className="btn" onClick={openNewProjectModal}>
+            ＋ New project
+          </button>
+        )}
       </div>
       <div className="grid g3">
+        {ids.length === 0 && (
+          <EmptyState
+            title="No projects yet"
+            message={allowed("project.manage") ? "Create your first project to start adding tasks." : "Nothing has been shared with you yet. Ask your admin to add you to a project."}
+            action={
+              allowed("project.manage") ? (
+                <button className="btn" onClick={openNewProjectModal}>
+                  ＋ New project
+                </button>
+              ) : undefined
+            }
+          />
+        )}
         {ids.map((k) => {
           const h = health(k, tasks);
           const projectTasks = tasks.filter((t) => t.projectId === k);

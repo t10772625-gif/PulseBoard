@@ -1,4 +1,19 @@
-import { ActivityEvent, Comment, Member, MemberId, Notification, Priority, Project, ProjectId, Status, Task } from "@/types";
+import {
+  ActivityEvent,
+  AutomationRule,
+  Client,
+  Comment,
+  HistoryItem,
+  Member,
+  MemberId,
+  Notification,
+  Priority,
+  Project,
+  ProjectId,
+  Status,
+  Task,
+  TaskTemplate,
+} from "@/types";
 
 export const MEMBERS: Record<MemberId, Member> = {
   me: { id: "me", name: "Ali Raza", initials: "AR", colorClass: "c1", role: "Owner" },
@@ -81,8 +96,12 @@ export const WORKLOAD: Record<MemberId, number[]> = {
 
 export const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 
-// Anchors the design's relative day offsets ("today" = 29 Sep 2026, month is 0-indexed).
-export const TODAY = new Date(2026, 8, 29);
+// Anchor for relative day offsets (due dates are stored as "days from today"): today at midnight
+export const TODAY = (() => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+})();
 
 export function dateForOffset(offset: number): string {
   const d = new Date(TODAY);
@@ -94,6 +113,132 @@ export function offsetForDate(dateStr: string): number {
   const d = new Date(dateStr);
   return Math.round((d.getTime() - TODAY.getTime()) / 86400000);
 }
+
+// Open-task capacity per member, used by workload balancing and capacity planning
+export const DEFAULT_CAPACITY: Record<MemberId, number> = { me: 5, ak: 4, ba: 4, sm: 4 };
+
+// Completed work from past sprints. Powers Smart Matching (who has done this
+// module before), analytics (cycle time, throughput, velocity) and estimates.
+const H = (
+  title: string,
+  module: string,
+  assignee: MemberId,
+  completedDaysAgo: number,
+  cycleDays: number,
+  estimateHours: number,
+  actualHours: number,
+  priority: Priority = "m"
+): HistoryItem => ({
+  title,
+  module,
+  assignee,
+  completedDaysAgo,
+  startedDaysAgo: completedDaysAgo + cycleDays,
+  createdDaysAgo: completedDaysAgo + cycleDays + 2,
+  estimateHours,
+  actualHours,
+  priority,
+});
+
+export const HISTORY: HistoryItem[] = [
+  H("Fix checkout rounding", "Payment", "ba", 3, 2, 4, 5, "h"),
+  H("Stripe webhook retries", "Payment", "ba", 6, 3, 6, 8, "h"),
+  H("Refund flow timeout", "Payment", "ba", 10, 2, 4, 4, "h"),
+  H("Invoice PDF layout", "Payment", "ak", 12, 3, 5, 6),
+  H("Payment gateway timeout", "Payment", "ba", 17, 1, 3, 2, "h"),
+  H("Currency formatter", "Payment", "me", 22, 2, 3, 3, "l"),
+  H("Login rate limiting", "Auth", "me", 2, 2, 5, 6, "h"),
+  H("Password reset email", "Auth", "me", 8, 1, 2, 2),
+  H("OAuth callback bug", "Auth", "me", 13, 2, 4, 7, "h"),
+  H("Session expiry banner", "Auth", "ak", 19, 2, 3, 3),
+  H("Biometric login spike", "Auth", "ba", 24, 3, 6, 9, "h"),
+  H("Hero illustration", "UI", "ak", 1, 3, 6, 5),
+  H("Button focus states", "UI", "ak", 5, 1, 2, 2, "l"),
+  H("Dark mode tokens", "UI", "ak", 9, 4, 8, 10),
+  H("Mobile nav overlap", "UI", "sm", 11, 2, 3, 4, "h"),
+  H("Empty states", "UI", "ak", 16, 2, 4, 3, "l"),
+  H("Icon set cleanup", "UI", "sm", 21, 1, 2, 2, "l"),
+  H("Push token refresh", "Mobile", "ba", 4, 2, 5, 6),
+  H("Android crash on resume", "Mobile", "ba", 7, 3, 6, 10, "h"),
+  H("iOS deep links", "Mobile", "ba", 14, 2, 4, 4),
+  H("Offline banner", "Mobile", "sm", 20, 2, 3, 3, "l"),
+  H("Launch press release", "Content", "sm", 2, 3, 6, 5),
+  H("Pricing FAQ", "Content", "ak", 7, 2, 3, 4),
+  H("Blog post: v2", "Content", "sm", 15, 4, 6, 7, "l"),
+  H("Release notes", "Content", "sm", 23, 1, 2, 2, "l"),
+  H("CI cache setup", "DevOps", "me", 5, 2, 4, 3),
+  H("Staging deploy script", "DevOps", "me", 11, 3, 6, 8),
+  H("Log retention policy", "DevOps", "me", 18, 1, 2, 2, "l"),
+  H("QA regression pass", "QA", "sm", 3, 2, 5, 6),
+  H("Test plan for checkout", "QA", "sm", 9, 2, 4, 4),
+  H("Smoke tests on Android", "QA", "sm", 16, 1, 3, 3),
+  H("Launch runbook", "Ops", "ak", 6, 2, 4, 4),
+  H("Vendor contracts", "Ops", "me", 25, 4, 5, 6, "l"),
+];
+
+// Keyword → module, for module detection (rule-based, works on English + common Roman Urdu terms)
+export const MODULE_KEYWORDS: Record<string, string[]> = {
+  Payment: ["payment", "checkout", "stripe", "invoice", "refund", "billing", "currency", "price", "pricing page"],
+  Auth: ["login", "auth", "oauth", "password", "session", "signup", "sign up", "biometric", "2fa", "otp"],
+  UI: ["design", "ui", "button", "layout", "hero", "color", "palette", "icon", "menu", "footer", "css", "wireframe"],
+  Mobile: ["android", "ios", "mobile", "push", "app v2", "notification"],
+  Content: ["copy", "blog", "press", "email", "announcement", "content", "faq", "release notes"],
+  DevOps: ["deploy", "ci", "server", "infra", "log", "analytics", "monitoring"],
+  QA: ["qa", "test", "regression", "smoke", "bug bash"],
+  Ops: ["rollout", "launch", "checklist", "plan", "vendor", "runbook"],
+};
+
+// How critical each module is (1–10), for auto-prioritization. Editable in Settings.
+export const MODULE_CRITICALITY: Record<string, number> = {
+  Payment: 10,
+  Auth: 10,
+  Mobile: 7,
+  DevOps: 7,
+  QA: 6,
+  UI: 5,
+  Ops: 5,
+  Content: 3,
+  General: 4,
+};
+
+export const INITIAL_CLIENTS: Client[] = [
+  { id: "cl1", name: "Northwind Traders", email: "pm@northwind.example", projectId: "p1", hourlyRate: 40, budget: 3000, reportDay: "Fri" },
+  { id: "cl2", name: "Globex Mobile", email: "cto@globex.example", projectId: "p2", hourlyRate: 55, budget: 5000, reportDay: "Mon" },
+];
+
+export const INITIAL_TEMPLATES: TaskTemplate[] = [
+  {
+    id: "tpl-client",
+    name: "New client website",
+    tasks: [
+      { title: "Kickoff call", status: "todo", priority: "m", labels: ["Ops"], subtasks: ["Agenda", "Send notes"] },
+      { title: "Sitemap and wireframes", status: "todo", priority: "h", labels: ["Design"], subtasks: ["Sitemap", "Wireframes"] },
+      { title: "Build pages", status: "todo", priority: "m", labels: ["Dev"], subtasks: ["Home", "About", "Contact"] },
+      { title: "Client review", status: "todo", priority: "m", labels: ["Ops"], subtasks: [] },
+    ],
+  },
+  {
+    id: "tpl-bug",
+    name: "Bug triage",
+    tasks: [
+      { title: "Reproduce the bug", status: "todo", priority: "h", labels: ["Bug"], subtasks: ["Steps", "Environment"] },
+      { title: "Fix and add a test", status: "todo", priority: "h", labels: ["Bug", "Dev"], subtasks: [] },
+      { title: "Verify on staging", status: "todo", priority: "m", labels: ["QA"], subtasks: [] },
+    ],
+  },
+];
+
+export const BOARD_TEMPLATES: { name: string; columns: [string, number][] }[] = [
+  { name: "Dev", columns: [["Backlog", 0], ["To do", 0], ["In progress", 3], ["Review", 2], ["Done", 0]] },
+  { name: "HR", columns: [["Pending", 0], ["Interview", 0], ["Shortlisted", 0], ["Rejected", 0]] },
+  { name: "Sales", columns: [["Lead", 0], ["Call", 0], ["Demo", 0], ["Negotiation", 0], ["Closed", 0]] },
+  { name: "Agency", columns: [["Brief", 0], ["Design", 0], ["Dev", 3], ["QA", 0], ["Client review", 0], ["Live", 0]] },
+];
+
+export const INITIAL_RULES: AutomationRule[] = [
+  { id: "r1", name: "Escalate new high-priority bugs", trigger: "priority_high", action: "notify_owner", active: true, runs: 3 },
+  { id: "r2", name: "Tag overdue tasks", trigger: "overdue", action: "add_label", param: "Late", active: false, runs: 0 },
+];
 
 export function formatDuration(totalSeconds: number): string {
   const h = Math.floor(totalSeconds / 3600);

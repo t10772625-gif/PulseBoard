@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="12 12 72 72" role="img" aria-label="PulseBoard">
+  <defs>
+    <linearGradient id="pb-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#14B8A6"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(16 16)">
+    <rect width="64" height="64" rx="16" fill="url(#pb-grad)"/>
+    <g fill="#fff" opacity="0.24">
+      <rect x="12" y="13" width="10" height="34" rx="3"/>
+      <rect x="27" y="13" width="10" height="24" rx="3"/>
+      <rect x="42" y="13" width="10" height="30" rx="3"/>
+    </g>
+    <path d="M9 36 H21 L27 20 L35 50 L41 30 L45 36 H55" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

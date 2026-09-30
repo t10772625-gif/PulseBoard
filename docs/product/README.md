@@ -55,6 +55,21 @@ mode. Excel library `xlsx@0.18.5` is installed but needs an upgrade
 
 ---
 
+## Implementation Status
+
+The frontend now implements most of [feature-audit.md](./feature-audit.md) on
+**mock data** (no backend yet). Tiers follow pricing **Option 2**; the plan can
+be switched under Settings → Plan to see locked/unlocked features. "AI" features
+are rule-based (`src/lib/ai.ts`) and call no external API.
+
+| Status | Features |
+| ------ | -------- |
+| ✅ Working (frontend, mock data) | All CORE-01…22 · VIEW-01…11 · AI-01…04, 10, 11, 12, 13, 14, 16…28 · NOTIF-01…06 · TIME-01…09, 11 · ANL-01…08, 11, 12 · COL-04…10 · SEC-04, 08, 09 · MOB-01, 02, 04, 08 · ADV-02…08 · CLI-01…08 · DEV-01, 02 (simulators) · SPEC 21, 22, 24–28 · CSV import/export, Trello import, .ics export, email→task, Slack commands |
+| 🟡 Demo only (UI, needs backend or a paid API) | AI-05 (structured bug report; screenshot reading needs a vision model) · AI-07 voice (works in Chrome/Edge via browser speech API) · AI-15 competitor tracker (sample data) · AI-22 meeting scheduler (mock calendars) · SEC-01 2FA, SEC-06 sessions, SEC-10 deletion · ADV-01 custom domain · ADV-04 webhooks (logged, not sent) · integration "Connect" toggles · share links / public form (same browser session only) |
+| ⏳ Not built (needs backend or decided to skip) | COL-01 real-time sync, COL-02 live presence, COL-03 co-editing · SEC-02/03 social login, SEC-07 password reset, SEC-11 rate limiting, SEC-12 SAML SSO · MOB-03 offline, MOB-05 native app, MOB-06/07 tablet & gestures, MOB-09 QR · AI-06 fix suggestion, AI-08 voice notes, AI-09 email threading (skip per feasibility) · TIME-10 optimal time (needs usage history) · ANL-09 performance score, ANL-10 team chemistry (privacy review) · billing |
+
+---
+
 ## Not Yet Covered
 
 The feature audit said nothing was missing. These gaps remain, and several

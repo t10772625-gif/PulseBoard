@@ -10,6 +10,7 @@ export default function Dropdown<T extends string>({
   style,
   triggerStyle,
   disabled,
+  inline,
 }: {
   value: T;
   options: DropdownOption<T>[];
@@ -17,6 +18,8 @@ export default function Dropdown<T extends string>({
   style?: CSSProperties;
   triggerStyle?: CSSProperties;
   disabled?: boolean;
+  // Open the list in the page flow instead of floating, for scrollable containers (modals) that would clip it
+  inline?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -51,7 +54,7 @@ export default function Dropdown<T extends string>({
         {!disabled && <span className="ddown-caret">▾</span>}
       </button>
       {open && !disabled && (
-        <div className="ddown-menu" role="listbox">
+        <div className={inline ? "ddown-menu inline" : "ddown-menu"} role="listbox">
           {options.map((o) => (
             <button
               type="button"

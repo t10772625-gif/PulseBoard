@@ -19,6 +19,13 @@ export default function CommandPalette() {
     { label: "Go to My Day", icon: "☀", run: () => router.push("/day") },
     { label: "Go to Inbox", icon: "✉", run: () => router.push("/inbox") },
     { label: "Go to Team", icon: "☺", run: () => router.push("/team") },
+    { label: "Go to AI assistant", icon: "✨", run: () => router.push("/ai") },
+    { label: "Go to Analytics", icon: "📊", run: () => router.push("/analytics") },
+    { label: "Go to Clients", icon: "💼", run: () => router.push("/clients") },
+    { label: "Go to Automations", icon: "⚡", run: () => router.push("/automations") },
+    { label: "Go to Integrations", icon: "🔌", run: () => router.push("/integrations") },
+    { label: "Go to Archive & trash", icon: "🗄", run: () => router.push("/archive") },
+    { label: "Go to Settings", icon: "⚙", run: () => router.push("/settings") },
     { label: "Create a task", icon: "＋", run: () => openNewTaskModal(currentProjectId) },
     { label: "Switch theme", icon: "◐", run: toggleTheme },
     ...(Object.keys(projects) as ProjectId[]).map((k) => ({
