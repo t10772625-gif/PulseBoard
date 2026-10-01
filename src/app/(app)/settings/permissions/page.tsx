@@ -1,56 +1,137 @@
 "use client";
-import Link from "next/link";
-import { Lock } from "lucide-react";
+import { Info, Lock, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
-import { PERMISSIONS, ROLES, ROLE_INFO, canEditRole, lockedForRole, type PermissionKey, type Role } from "@/lib/permissions";
+import { PERMISSIONS, ROLES, canEditRole, lockedForRole, type PermissionKey, type Role } from "@/lib/permissions";
 import Gate from "@/components/Gate";
 import { SettingRow, Switch } from "@/components/ui";
+import Dropdown from "@/components/Dropdown";
+import SettingsHeader from "@/components/SettingsHeader";
+import { useT } from "@/i18n/I18nProvider";
+import type { MessageKey } from "@/i18n";
 
-const GROUPS: { id: string; title: string; hint: string }[] = [
-  { id: "Pages", title: "Pages this role can open", hint: "A hidden page also hides its data in the database." },
-  { id: "Tasks", title: "Task actions", hint: "What this role can change on boards and tasks." },
-  { id: "Workspace", title: "Workspace actions", hint: "Boards, people, clients, automations and exports." },
+// One colour per role for the overview (dot + bars)
+const ROLE_COLOR: Record<Role, string> = { Owner: "#12b5a0", Admin: "#3a86ff", "Sub Admin": "#9b6cff", Member: "#f0a400", Viewer: "#8ca3b4" };
+
+function Meter({ n, total }: { n: number; total: number }) {
+  return (
+    <span className="st-meter">
+      <b>
+        {n}/{total}
+      </b>
+      <span className="st-meter-bar" aria-hidden>
+        <i style={{ width: `${total ? (n / total) * 100 : 0}%` }} />
+      </span>
+    </span>
+  );
+}
+
+const GROUPS: { id: string; title: MessageKey; hint: MessageKey }[] = [
+  { id: "Pages", title: "permPage.groupPages", hint: "permPage.groupPagesHint" },
+  { id: "Tasks", title: "permPage.groupTasks", hint: "permPage.groupTasksHint" },
+  { id: "Workspace", title: "permPage.groupWorkspace", hint: "permPage.groupWorkspaceHint" },
 ];
 
 // Role-by-role permissions. Owner is always full access; only the Owner changes
 // Admin; an Admin controls Sub Admin, Member and Viewer. Viewer can only be given
 // pages. The same rules are enforced by the database (has_permission + RLS).
 export default function PermissionsPage() {
-  const { permissions, setPermission, resetPermissions, myRole, allowed, realMode, toast } = useStore();
+  const { permissions, setPermission, resetPermissions, myRole, allowed, realMode, toast, viewAsRole, setViewAsRole } = useStore();
+  const { t } = useT();
+  const roleName = (r: Role) => t(`role.${r}`);
+  const permLabel = (k: PermissionKey) => t(`perm.${k}`);
   const canManage = allowed("member.manage");
   const [role, setRole] = useState<Role>(ROLES.find((r) => canEditRole(myRole, r)) ?? "Member");
   const editable = canEditRole(myRole, role);
 
-  const lockReason =
-    role === "Owner" ? "The Owner always has full access." : !editable ? `Only the Owner can change the ${role} role.` : null;
+  const lockReason = role === "Owner" ? t("permPage.lockOwner") : !editable ? t("permPage.lockOnlyOwner", { role: roleName(role) }) : null;
 
   return (
     <>
-      <div className="top">
-        <div>
-          <p className="mute">
-            <Link className="link" href="/settings">
-              Settings
-            </Link>{" "}
-            / Roles &amp; permissions
-          </p>
-          <h1>Roles &amp; permissions</h1>
-          <p className="mute">Pick a role, then choose which pages it sees and what it can do. Your plan decides which features exist; this decides who can use them.</p>
+      <SettingsHeader title={t("permPage.title")} hint={t("permPage.hint")} />
+
+      {/* Overview (was the Roles & permissions card on the old single Settings page) */}
+      <section className="card st-roles" style={{ marginBottom: 14 }} aria-labelledby="st-role-h">
+        <div className="st-card-head">
+          <h2 id="st-role-h">{t("permPage.yourRole", { role: roleName(myRole) })}</h2>
+          {/* Only claim database enforcement when the workspace really is in the database */}
+          <span className={`st-pill ${realMode ? "" : "muted"}`}>
+            <ShieldCheck size={13} aria-hidden /> {realMode ? t("permPage.rlsOn") : t("permPage.rlsDemo")}
+          </span>
+          {!canManage && <span className="chip">{t("common.viewOnly")}</span>}
         </div>
-      </div>
+        <p className="mute st-foot" style={{ marginTop: 0 }}>
+          <Info size={14} aria-hidden /> {t("permPage.overviewHint")}
+        </p>
+        <div className="st-table-wrap">
+          <table className="tbl st-role-table">
+            <thead>
+              <tr>
+                <th>{t("permPage.colRole")}</th>
+                <th>{t("permPage.colPages")}</th>
+                <th>{t("permPage.colActions")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ROLES.map((r) => {
+                const row = permissions[r];
+                const pageTotal = PERMISSIONS.filter((p) => p.group === "Pages").length;
+                const actionTotal = PERMISSIONS.filter((p) => p.group !== "Pages").length;
+                const pages = PERMISSIONS.filter((p) => p.group === "Pages" && (r === "Owner" || row[p.key])).length;
+                const actions = PERMISSIONS.filter((p) => p.group !== "Pages" && (r === "Owner" || row[p.key])).length;
+                return (
+                  <tr key={r} className={r === myRole ? "st-you" : ""} style={{ cursor: "default" }}>
+                    <td>
+                      <span className="st-dot" style={{ background: ROLE_COLOR[r] }} aria-hidden />
+                      <b>{roleName(r)}</b>
+                    </td>
+                    <td>
+                      <Meter n={pages} total={pageTotal} />
+                    </td>
+                    <td>
+                      <Meter n={actions} total={actionTotal} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {(myRole === "Owner" || myRole === "Admin") && (
+          <label className="st-field">
+            {t("permPage.previewAs")}
+            <Dropdown
+              value={viewAsRole}
+              onChange={setViewAsRole}
+              style={{ display: "block" }}
+              // You can only preview your own role or a lower one
+              options={ROLES.slice(ROLES.indexOf(myRole)).map((r) => ({ value: r, label: r === myRole ? t("permPage.youSuffix", { role: roleName(r) }) : roleName(r) }))}
+            />
+          </label>
+        )}
+        <p className="st-lock-note">
+          <Lock size={15} aria-hidden />
+          <span>
+            {t("permPage.editingNeeds")}{" "}
+            <Gate id="SEC-05" compact>
+              <b>{t("plan.legendary")}</b>
+            </Gate>{" "}
+            {t("permPage.editingNeedsEnd")}
+          </span>
+        </p>
+      </section>
 
       {!canManage ? (
         <div className="card">
-          <p>Only people with the &quot;Invite members, change roles &amp; permissions&quot; permission can edit this. Your role: {myRole}.</p>
+          <p>{t("permPage.cantManage", { role: roleName(myRole) })}</p>
         </div>
       ) : (
         <Gate id="SEC-05">
           <div className="perm-tabs">
-            <div className="tabs" role="tablist" aria-label="Role">
+            <div className="tabs" role="tablist" aria-label={t("permPage.roleTabs")}>
               {ROLES.map((r) => (
                 <button key={r} role="tab" aria-selected={r === role} className={r === role ? "on" : ""} onClick={() => setRole(r)}>
-                  {r}
+                  {roleName(r)}
                 </button>
               ))}
             </div>
@@ -59,18 +140,18 @@ export default function PermissionsPage() {
           <div className="card" style={{ marginBottom: 14 }}>
             <div className="meta">
               <div>
-                <h2 style={{ margin: 0 }}>{role}</h2>
-                <p className="mute">{ROLE_INFO[role]}</p>
+                <h2 style={{ margin: 0 }}>{roleName(role)}</h2>
+                <p className="mute">{t(`roleInfo.${role}`)}</p>
               </div>
               {editable && (
                 <button
                   className="ghost"
                   onClick={() => {
                     resetPermissions(role);
-                    toast(`${role} reset to defaults`);
+                    toast(t("permPage.resetToast", { role: roleName(role) }));
                   }}
                 >
-                  Reset to defaults
+                  {t("permPage.resetDefaults")}
                 </button>
               )}
             </div>
@@ -87,17 +168,17 @@ export default function PermissionsPage() {
               const viewOnly = role === "Viewer" && g.id !== "Pages";
               return (
                 <div className="card" key={g.id}>
-                  <h2>{g.title}</h2>
+                  <h2>{t(g.title)}</h2>
                   <p className="mute" style={{ fontSize: 12, marginBottom: 6 }}>
-                    {viewOnly ? "Viewer is view-only, so these are always off." : g.hint}
+                    {viewOnly ? t("permPage.viewerOff") : t(g.hint)}
                   </p>
                   {items.map((p) => {
                     const key = p.key as PermissionKey;
                     const locked = lockedForRole(role, key);
                     const on = role === "Owner" || (!locked && permissions[role][key]);
                     return (
-                      <SettingRow key={key} title={p.label}>
-                        <Switch label={`${role}: ${p.label}`} checked={on} disabled={!editable || locked} onChange={(v) => setPermission(role, key, v)} />
+                      <SettingRow key={key} title={permLabel(key)}>
+                        <Switch label={`${roleName(role)}: ${permLabel(key)}`} checked={on} disabled={!editable || locked} onChange={(v) => setPermission(role, key, v)} />
                       </SettingRow>
                     );
                   })}
@@ -107,10 +188,7 @@ export default function PermissionsPage() {
           </div>
 
           <p className="mute" style={{ fontSize: 12, marginTop: 10 }}>
-            {realMode
-              ? "Changes are saved to the workspace and enforced by the database for everyone."
-              : "Demo mode: changes apply in this browser. With Supabase they're saved and enforced by the database."}{" "}
-            Preview a role from Settings → &quot;Preview the app as&quot;.
+            {realMode ? t("permPage.savedReal") : t("permPage.savedDemo")} {t("permPage.previewTip")}
           </p>
         </Gate>
       )}

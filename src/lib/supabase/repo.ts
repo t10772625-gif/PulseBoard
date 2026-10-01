@@ -4,6 +4,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Attachment, AutomationRule, Client, Comment, Member, MemberId, Notification, Plan, Project, ShareLink, Subtask, Task } from "@/types";
 import { TODAY } from "../mock-data";
+import { getActiveLocale, tr } from "@/i18n";
 import { DEFAULT_PERMISSIONS, type PermissionKey, type PermissionMatrix, type Role } from "../permissions";
 
 export type DbCtx = { sb: SupabaseClient; ws: string; uid: string };
@@ -371,10 +372,11 @@ export function repo(ctx: DbCtx) {
       const res = await fetch("/api/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId: ws, toUserId: toDbUser(ctx, userId), subject, text, taskUrl }),
+        body: JSON.stringify({ workspaceId: ws, toUserId: toDbUser(ctx, userId), subject, text, taskUrl, locale: getActiveLocale() }),
       });
       if (res.status === 503) return; // email not set up yet: in-app notification still works
-      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Email failed");
+      // The server's message stays out of the UI; show our own text per status
+      if (!res.ok) throw new Error(res.status === 429 ? tr("email.rateLimited") : res.status === 403 ? tr("email.forbidden") : tr("email.failed"));
     },
     setPermission: (role: Role, permission: PermissionKey, allowed: boolean) =>
       run(sb.from("role_permissions").upsert({ workspace_id: ws, role, permission, allowed }, { onConflict: "workspace_id,role,permission" })),

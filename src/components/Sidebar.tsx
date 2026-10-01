@@ -6,12 +6,14 @@ import {
   Archive,
   BarChart3,
   Briefcase,
+  ChevronDown,
   FolderKanban,
   Inbox,
   LayoutDashboard,
   PanelLeftClose,
   PanelLeftOpen,
   Plug,
+  Settings,
   Sparkles,
   Sun,
   Users,
@@ -20,33 +22,37 @@ import {
 } from "lucide-react";
 import { useStore, health } from "@/lib/store";
 import { pagePermissionFor } from "@/lib/permissions";
+import { SETTINGS_PAGES } from "@/lib/settings-nav";
+import { useT } from "@/i18n/I18nProvider";
+import type { MessageKey } from "@/i18n";
 import { ProjectId } from "@/types";
 import { Avatar } from "./ui";
 
-type NavItem = { href: string; icon: LucideIcon; label: string; ur: string; match: string };
+type NavItem = { href: string; icon: LucideIcon; labelKey: MessageKey; match: string };
 
 const NAV: NavItem[] = [
-  { href: "/dashboard", icon: LayoutDashboard, label: "Home", ur: "ہوم", match: "/dashboard" },
-  { href: "/projects", icon: FolderKanban, label: "Projects", ur: "پروجیکٹس", match: "/projects" },
-  { href: "/day", icon: Sun, label: "My Day", ur: "میرا دن", match: "/day" },
-  { href: "/inbox", icon: Inbox, label: "Inbox", ur: "ان باکس", match: "/inbox" },
-  { href: "/team", icon: Users, label: "Team", ur: "ٹیم", match: "/team" },
+  { href: "/dashboard", icon: LayoutDashboard, labelKey: "nav.home", match: "/dashboard" },
+  { href: "/projects", icon: FolderKanban, labelKey: "nav.projects", match: "/projects" },
+  { href: "/day", icon: Sun, labelKey: "nav.myDay", match: "/day" },
+  { href: "/inbox", icon: Inbox, labelKey: "nav.inbox", match: "/inbox" },
+  { href: "/team", icon: Users, labelKey: "nav.team", match: "/team" },
 ];
 
 const WORKSPACE: NavItem[] = [
-  { href: "/ai", icon: Sparkles, label: "AI assistant", ur: "اے آئی", match: "/ai" },
-  { href: "/analytics", icon: BarChart3, label: "Analytics", ur: "تجزیہ", match: "/analytics" },
-  { href: "/clients", icon: Briefcase, label: "Clients", ur: "کلائنٹس", match: "/clients" },
-  { href: "/automations", icon: Workflow, label: "Automations", ur: "آٹومیشن", match: "/automations" },
-  { href: "/integrations", icon: Plug, label: "Integrations", ur: "انٹیگریشنز", match: "/integrations" },
-  { href: "/archive", icon: Archive, label: "Archive", ur: "آرکائیو", match: "/archive" },
+  { href: "/ai", icon: Sparkles, labelKey: "nav.ai", match: "/ai" },
+  { href: "/analytics", icon: BarChart3, labelKey: "nav.analytics", match: "/analytics" },
+  { href: "/clients", icon: Briefcase, labelKey: "nav.clients", match: "/clients" },
+  { href: "/automations", icon: Workflow, labelKey: "nav.automations", match: "/automations" },
+  { href: "/integrations", icon: Plug, labelKey: "nav.integrations", match: "/integrations" },
+  { href: "/archive", icon: Archive, labelKey: "nav.archive", match: "/archive" },
 ];
 
 type Tip = { label: string; top: number; left: number };
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { tasks, notifications, projects, language, allowed, members, viewAsRole, workspaceName } = useStore();
+  const { tasks, notifications, projects, allowed, members, viewAsRole, workspaceName } = useStore();
+  const { t } = useT();
   // RBAC: only show pages this role may open
   const visible = (n: NavItem) => { const p = pagePermissionFor(n.href); return !p || allowed(p); };
   const me = members.me;
@@ -54,6 +60,18 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   // Rendered position: fixed so .side-scroll's overflow doesn't clip it
   const [tip, setTip] = useState<Tip | null>(null);
+  // Settings is a group, not a page: clicking it shows / hides its sub-pages.
+  // It opens by itself whenever you land on a settings page; after that the
+  // user's own toggle wins until the next navigation into settings.
+  const inSettings = pathname.startsWith("/settings");
+  const [settingsToggle, setSettingsToggle] = useState<boolean | null>(null);
+  const [lastPath, setLastPath] = useState(pathname);
+  if (lastPath !== pathname) {
+    setLastPath(pathname);
+    if (inSettings) setSettingsToggle(null);
+  }
+  const settingsExpanded = settingsToggle ?? inSettings;
+  const settingsLabel = t("nav.settings");
 
   useEffect(() => {
     try {
@@ -98,9 +116,9 @@ export default function Sidebar() {
 
   function renderItem(n: NavItem) {
     const Icon = n.icon;
-    const label = language === "ur" ? n.ur : n.label;
+    const label = t(n.labelKey);
     return (
-      <Link key={n.href} href={n.href} className={`nav ${pathname.startsWith(n.match) ? "on" : ""}`} aria-label={n.label} {...tipProps(label)}>
+      <Link key={n.href} href={n.href} className={`nav ${pathname.startsWith(n.match) ? "on" : ""}`} aria-label={label} {...tipProps(label)}>
         <i>
           <Icon size={18} strokeWidth={2} />
         </i>
@@ -112,7 +130,7 @@ export default function Sidebar() {
 
   return (
     <aside className={`side ${collapsed ? "collapsed" : ""}`}>
-      <button className="side-collapse" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={toggleCollapsed}>
+      <button className="side-collapse" aria-label={collapsed ? t("nav.expand") : t("nav.collapse")} onClick={toggleCollapsed}>
         {collapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
       </button>
       <div className="side-scroll">
@@ -120,11 +138,53 @@ export default function Sidebar() {
           <b></b>
           <span className="logo-text">PulseBoard</span>
         </div>
-        <small>{language === "ur" ? "مین" : "Main"}</small>
+        <small>{t("nav.main")}</small>
         <nav id="mn">{NAV.filter(visible).map(renderItem)}</nav>
-        {WORKSPACE.some(visible) && <small>{language === "ur" ? "ورک اسپیس" : "Workspace"}</small>}
+        {WORKSPACE.some(visible) && <small>{t("nav.workspace")}</small>}
         <nav>{WORKSPACE.filter(visible).map(renderItem)}</nav>
-        {allowed("page.projects") && <small>{language === "ur" ? "پروجیکٹس" : "Projects"}</small>}
+        {allowed("page.settings") && (
+          <nav className="nav-group">
+            <button
+              type="button"
+              className={`nav ${inSettings ? "on-parent" : ""}`}
+              aria-expanded={settingsExpanded}
+              aria-controls="settings-subnav"
+              aria-label={settingsLabel}
+              onClick={() => setSettingsToggle(!settingsExpanded)}
+              {...tipProps(settingsLabel)}
+            >
+              <i>
+                <Settings size={18} strokeWidth={2} />
+              </i>
+              <span className="nav-label">{settingsLabel}</span>
+              <ChevronDown size={14} className={`nav-chev ${settingsExpanded ? "open" : ""}`} aria-hidden />
+            </button>
+            {settingsExpanded && (
+              <div id="settings-subnav" className="nav-sub">
+                {SETTINGS_PAGES.map((sp) => {
+                  const Icon = sp.icon;
+                  const label = t(sp.labelKey);
+                  return (
+                    <Link
+                      key={sp.href}
+                      href={sp.href}
+                      className={`nav ${pathname === sp.href || pathname.startsWith(sp.href + "/") ? "on" : ""}`}
+                      aria-label={label}
+                      aria-current={pathname === sp.href ? "page" : undefined}
+                      {...tipProps(label)}
+                    >
+                      <i>
+                        <Icon size={16} strokeWidth={2} />
+                      </i>
+                      <span className="nav-label">{label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </nav>
+        )}
+        {allowed("page.projects") && <small>{t("nav.projects")}</small>}
         <nav className="plist" hidden={!allowed("page.projects")}>
           {(Object.keys(projects) as ProjectId[]).map((k) => {
             const h = health(k, tasks);
@@ -139,14 +199,14 @@ export default function Sidebar() {
           })}
         </nav>
         <div className="me">
-          <span {...tipProps(me?.name ?? "You")} style={{ display: "inline-flex" }}>
+          <span {...tipProps(me?.name ?? t("common.you"))} style={{ display: "inline-flex" }}>
             <Avatar id="me" />
           </span>
-          <Link href="/profile" className="who" style={{ flex: 1, minWidth: 0, color: "inherit" }} aria-label="Your profile">
-            <b style={{ display: "block" }}>{me?.name ?? "You"}</b>
+          <Link href="/profile" className="who" style={{ flex: 1, minWidth: 0, color: "inherit" }} aria-label={t("nav.yourProfile")}>
+            <b style={{ display: "block" }}>{me?.name ?? t("common.you")}</b>
             <span style={{ color: "#7F96AA" }}>
-              {me?.role ?? "Member"}
-              {viewAsRole !== me?.role && ` · viewing as ${viewAsRole}`} · {workspaceName}
+              {t(`role.${me?.role ?? "Member"}`)}
+              {viewAsRole !== me?.role && ` · ${t("nav.viewingAs", { role: t(`role.${viewAsRole}`) })}`} · {workspaceName}
             </span>
           </Link>
         </div>

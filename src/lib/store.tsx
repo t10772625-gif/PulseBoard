@@ -41,8 +41,10 @@ import {
   INITIAL_TEMPLATES,
   MEMBERS,
   PROJECTS,
+  STATUS_LABEL,
 } from "./mock-data";
 import { PLANS, hasFeature } from "./plans";
+import { DEFAULT_LOCALE, isSupportedLocale, loadLocale, tr } from "@/i18n";
 import { getSupabase, supabaseConfigured } from "./supabase/client";
 import { initials, loadWorkspace, repo, rowToTask, type Invite, type Repo } from "./supabase/repo";
 import { DEFAULT_PERMISSIONS, canEditRole, lockedForRole, type PermissionKey, type PermissionMatrix } from "./permissions";
@@ -76,12 +78,12 @@ export function health(projectId: ProjectId, tasks: Task[]): Health {
   const overflowPoints = overflow * 8;
   const score = ts.length === 0 ? 100 : Math.max(25, 100 - overduePoints - blockedPoints - overflowPoints - bugPoints);
   const color = score >= 75 ? "#12B5A0" : score >= 50 ? "#F0A400" : "#E5483A";
-  const label = score >= 75 ? "Healthy" : score >= 50 ? "Needs attention" : score < 40 ? "Critical" : "At risk";
+  const label = score >= 75 ? tr("health.healthy") : score >= 50 ? tr("health.attention") : score < 40 ? tr("health.critical") : tr("health.atRisk");
   const breakdown: { label: string; points: number }[] = [];
-  if (overdue > 0) breakdown.push({ label: `${overdue} overdue`, points: -overduePoints });
-  if (blocked > 0) breakdown.push({ label: `${blocked} blocked`, points: -blockedPoints });
-  if (openBugs.length > 0) breakdown.push({ label: `${openBugs.length} open bug${openBugs.length > 1 ? "s" : ""}`, points: -bugPoints });
-  if (overflow > 0) breakdown.push({ label: `${overflow} over WIP limit`, points: -overflowPoints });
+  if (overdue > 0) breakdown.push({ label: tr("health.overdue", { n: overdue }), points: -overduePoints });
+  if (blocked > 0) breakdown.push({ label: tr("health.blocked", { n: blocked }), points: -blockedPoints });
+  if (openBugs.length > 0) breakdown.push({ label: tr("health.bugs", { n: openBugs.length }), points: -bugPoints });
+  if (overflow > 0) breakdown.push({ label: tr("health.wip", { n: overflow }), points: -overflowPoints });
   return {
     score,
     overdue,
@@ -257,8 +259,10 @@ type Store = {
   // Settings
   integrations: Record<string, boolean>;
   toggleIntegration: (key: string) => void;
-  language: "en" | "ur";
-  setLanguage: (l: "en" | "ur") => void;
+  // Interface language (a code from src/i18n/locales.json). Saved per browser for
+  // now; a per-user / per-workspace saved preference needs a database migration.
+  language: string;
+  setLanguage: (l: string) => void;
   viewAsRole: Member["role"];
   setViewAsRole: (r: Member["role"]) => void;
   canEdit: boolean;
@@ -396,7 +400,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [dndUntil, setDndUntil] = useState<number | null>(null);
   const [digestMode, setDigestMode] = useState(false);
   const [integrations, setIntegrations] = useState<Record<string, boolean>>({ github: DEMO, slack: false, gcal: false, gmail: false });
-  const [language, setLanguage] = useState<"en" | "ur">("en");
+  const [language, setLanguageState] = useState<string>(DEFAULT_LOCALE);
+  // The language only switches once its file has loaded, so every component
+  // (including text built outside React, e.g. labels and toasts) re-renders in it at once.
+  const setLanguage = useCallback((l: string) => {
+    if (!isSupportedLocale(l)) return;
+    try {
+      localStorage.setItem("pb_lang", l);
+    } catch {}
+    loadLocale(l).then(() => setLanguageState(l));
+  }, []);
+  useEffect(() => {
+    let saved: string | null = null;
+    try {
+      // A ?lang= link (e.g. a shared pricing page) wins over the saved choice and is remembered
+      const fromUrl = new URLSearchParams(window.location.search).get("lang");
+      if (isSupportedLocale(fromUrl)) localStorage.setItem("pb_lang", fromUrl);
+      saved = localStorage.getItem("pb_lang");
+    } catch {}
+    if (isSupportedLocale(saved) && saved !== DEFAULT_LOCALE) loadLocale(saved).then(() => setLanguageState(saved));
+  }, []);
   // viewAsRole = the role the UI currently acts as. It starts as your real role;
   // Owner/Admin can preview a lower role from Settings.
   const [viewAsRole, setViewAsRole] = useState<Member["role"]>("Owner");
@@ -429,7 +452,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     planRef.current = plan;
   }, [members, plan]);
   // First name of the signed-in user, for activity messages ("Sara moved this to Done")
-  const meName = () => membersRef.current.me?.name.split(" ")[0] ?? "You";
+  const meName = () => membersRef.current.me?.name.split(" ")[0] ?? tr("common.you");
   useEffect(() => {
     digestRef.current = digestMode;
   }, [digestMode]);
@@ -474,7 +497,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const db = dbRef.current;
     if (!db) return;
     fn(db).catch((e: Error) => {
-      setToastMessage(`Couldn't save: ${e.message}`);
+      // Raw database errors stay in the console, never in the UI (CLAUDE.md §6.1)
+      console.error("[persist]", e);
+      setToastMessage(tr("store.saveFailed"));
       setToastAction(null);
     });
   }, []);
@@ -588,14 +613,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             setComments((all) =>
               (all[c.task_id] || []).some((x) => x.id === c.id)
                 ? all
-                : { ...all, [c.task_id]: [...(all[c.task_id] || []), { id: c.id, taskId: c.task_id, parentId: c.parent_id, author: c.author_id === d.ctx.uid ? "me" : c.author_id ?? "me", text: c.body, at: "Just now", likedBy: [] }] }
+                : { ...all, [c.task_id]: [...(all[c.task_id] || []), { id: c.id, taskId: c.task_id, parentId: c.parent_id, author: c.author_id === d.ctx.uid ? "me" : c.author_id ?? "me", text: c.body, at: tr("time.justNow"), likedBy: [] }] }
             );
           })
           .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${d.ctx.uid}` }, (payload) => {
             const n = payload.new as { id: string; task_id: string | null; message: string };
             if (notificationIds.current.includes(n.id)) return;
             notificationIds.current = [n.id, ...notificationIds.current];
-            setNotifications((ns) => [{ unread: 1, taskId: n.task_id ?? "", message: n.message, when: "Just now" }, ...ns]);
+            setNotifications((ns) => [{ unread: 1, taskId: n.task_id ?? "", message: n.message, when: tr("time.justNow") }, ...ns]);
           })
           .subscribe();
       })
@@ -668,14 +693,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const logActivity = useCallback((taskId: string, message: string) => {
     setActivity((a) => ({
       ...a,
-      [taskId]: [{ id: nextId("a"), taskId, actor: "me" as MemberId, message, at: "Just now" }, ...(a[taskId] || [])],
+      [taskId]: [{ id: nextId("a"), taskId, actor: "me" as MemberId, message, at: tr("time.justNow") }, ...(a[taskId] || [])],
     }));
     setAudit((a) => [{ id: nextId("ev"), at: Date.now(), actor: "me" as MemberId, message, taskId }, ...a].slice(0, 500));
     persist((r) => r.logEvent(taskId, "activity", message));
   }, [persist]);
 
   const notify = useCallback((taskId: string, message: string) => {
-    setNotifications((ns) => [{ unread: 1, taskId, message, when: "Just now" }, ...ns]);
+    setNotifications((ns) => [{ unread: 1, taskId, message, when: tr("time.justNow") }, ...ns]);
     notificationIds.current = [undefined, ...notificationIds.current];
     persist((r) => r.notifyUser("me", taskId || null, message));
     // Browser push (MOB-04) when the tab is in the background and permission was granted.
@@ -695,7 +720,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const matching = rulesRef.current.filter((r) => r.active && r.trigger === trigger);
       if (!matching.length) return;
       for (const r of matching) {
-        if (r.action === "notify_owner") notify(task.id, `⚡ ${r.name}: "${task.title}"`);
+        if (r.action === "notify_owner") notify(task.id, tr("store.ruleNotify", { rule: r.name, title: task.title }));
         if (r.action === "assign_me") setTasks((ts) => ts.map((t) => (t.id === task.id ? { ...t, assignee: "me" } : t)));
         if (r.action === "set_high") setTasks((ts) => ts.map((t) => (t.id === task.id ? { ...t, priority: "h" } : t)));
         if (r.action === "add_label" && r.param)
@@ -754,7 +779,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const columnLabel = useCallback(
     (projectId: ProjectId, status: Status) => {
       const found = (customColumns[projectId] ?? COLUMNS).find((c) => c[0] === status);
-      return found ? found[1] : status;
+      if (!found) return status;
+      // A default column still named in English shows in the current language;
+      // a name the team typed (renamed / template column) is shown as written.
+      const def = COLUMNS.find((c) => c[0] === status);
+      return def && found[1] === def[1] ? STATUS_LABEL[status as keyof typeof STATUS_LABEL] : found[1];
     },
     [customColumns]
   );
@@ -787,8 +816,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         id,
       };
       setTasks((ts) => [...ts, task]);
-      setActivity((a) => ({ ...a, [id]: [{ id: nextId("a"), taskId: id, actor: "me", message: `Task created by ${meName()}`, at: "Just now" }] }));
-      setAudit((a) => [{ id: nextId("ev"), at: Date.now(), actor: "me" as MemberId, message: `Created "${task.title}"`, taskId: id }, ...a]);
+      setActivity((a) => ({ ...a, [id]: [{ id: nextId("a"), taskId: id, actor: "me", message: tr("store.taskCreatedBy", { name: meName() }), at: tr("time.justNow") }] }));
+      setAudit((a) => [{ id: nextId("ev"), at: Date.now(), actor: "me" as MemberId, message: tr("store.auditCreated", { title: task.title }), taskId: id }, ...a]);
       runRules("created", task);
       if (task.priority === "h") runRules("priority_high", task);
       return id;
@@ -820,7 +849,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         subtasks: task.subtasks.map((s) => [s[0], 0] as [string, 0 | 1]),
         checklist: task.checklist?.map((s) => [s[0], 0] as [string, 0 | 1]),
       });
-      toast(`🔁 Next "${task.title}" scheduled`);
+      toast(tr("store.nextScheduled", { title: task.title }));
     },
     [createTask, toast]
   );
@@ -839,26 +868,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
       if (field === "status") {
         const label = before ? columnLabel(before.projectId, value as Status) : (value as string);
-        logActivity(id, `${meName()} moved this to ${label}`);
+        logActivity(id, tr("store.actMoved", { name: meName(), column: label }));
         if (value === "done" && before && before.status !== "done") {
           runRules("status_done", before);
           spawnRecurrence(before);
         }
       }
       if (field === "priority") {
-        logActivity(id, `${meName()} changed priority to ${PRIORITY_LABELS[value as "h" | "m" | "l"]}`);
+        logActivity(id, tr("store.actPriority", { name: meName(), priority: tr(`priority.${value as "h" | "m" | "l"}`) }));
         if (value === "h" && before) runRules("priority_high", before);
       }
       if (field === "assignee") {
-        logActivity(id, `${meName()} reassigned this to ${membersRef.current[value as MemberId]?.name ?? value}`);
+        logActivity(id, tr("store.actReassigned", { name: meName(), assignee: membersRef.current[value as MemberId]?.name ?? String(value) }));
         if (before) runRules("assigned", before);
-        if (value === "me" && before && before.assignee !== "me") notify(id, `You were assigned "${before.title}"`);
+        if (value === "me" && before && before.assignee !== "me") notify(id, tr("store.youAssigned", { title: before.title }));
         // Tell a teammate they were assigned (their inbox, via the notifications table)
         if (value !== "me" && before && before.assignee !== value) {
-          persist((r) => r.notifyUser(value as MemberId, id, `${meName()} assigned you "${before.title}"`));
+          persist((r) => r.notifyUser(value as MemberId, id, tr("store.assignedYou", { name: meName(), title: before.title })));
           // Real email on assignment (Pro: NOTIF-02)
           if (hasFeature(planRef.current, "NOTIF-02"))
-            persist((r) => r.emailUser(value as MemberId, `You were assigned: ${before.title}`, `${meName()} assigned you "${before.title}".`, `${window.location.origin}/projects/${before.projectId}`));
+            persist((r) => r.emailUser(value as MemberId, tr("store.emailAssignedSubject", { title: before.title }), tr("store.emailAssignedBody", { name: meName(), title: before.title }), `${window.location.origin}/projects/${before.projectId}`));
         }
       }
     },
@@ -898,7 +927,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return { ...t, subtasks };
         })
       );
-      logActivity(taskId, `${meName()} marked "${label}" as ${nowDone ? "done" : "not done"}`);
+      logActivity(taskId, tr("store.actSubtask", { name: meName(), label, state: nowDone ? tr("store.stateDone") : tr("store.stateNotDone") }));
     },
     [logActivity]
   );
@@ -906,7 +935,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const addSubtask = useCallback(
     (taskId: string, title: string) => {
       setTasks((ts) => ts.map((t) => (t.id === taskId ? { ...t, subtasks: [...t.subtasks, [title, 0] as [string, 0 | 1]] } : t)));
-      logActivity(taskId, `${meName()} added a subtask "${title}"`);
+      logActivity(taskId, tr("store.actAddSubtask", { name: meName(), title }));
     },
     [logActivity]
   );
@@ -922,7 +951,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const addChecklistItem = useCallback(
     (taskId: string, title: string) => {
       setTasks((ts) => ts.map((t) => (t.id === taskId ? { ...t, checklist: [...(t.checklist ?? []), [title, 0] as [string, 0 | 1]] } : t)));
-      logActivity(taskId, `${meName()} added checklist item "${title}"`);
+      logActivity(taskId, tr("store.actAddChecklist", { name: meName(), title }));
     },
     [logActivity]
   );
@@ -969,9 +998,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setTracking((t) => (t && set.has(t.taskId) ? null : t));
       setOpenTaskId((id) => (id && set.has(id) ? null : id));
       setSelectedIds((s) => s.filter((id) => !set.has(id)));
-      setAudit((a) => [{ id: nextId("ev"), at: Date.now(), actor: "me" as MemberId, message: `Deleted ${removed.length} task(s)` }, ...a]);
+      setAudit((a) => [{ id: nextId("ev"), at: Date.now(), actor: "me" as MemberId, message: tr("store.auditDeleted", { n: removed.length }) }, ...a]);
       persist((r) => r.softDelete(removed.map((t) => t.id)));
-      toast(`${removed.length} task${removed.length > 1 ? "s" : ""} deleted`, { label: "Undo", run: () => restoreTasks(ids) });
+      toast(tr("store.deleted", { n: removed.length }), { label: tr("store.undo"), run: () => restoreTasks(ids) });
     },
     [comments, activity, attachments, toast, restoreTasks, persist]
   );
@@ -994,7 +1023,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setSelectedIds((s) => s.filter((id) => !set.has(id)));
       setOpenTaskId((id) => (id && set.has(id) ? null : id));
       persist((r) => r.setArchived(moving.map((t) => t.id), true));
-      toast(`${moving.length} archived`, { label: "Undo", run: () => unarchiveRef.current(ids) });
+      toast(tr("store.archived", { n: moving.length }), { label: tr("store.undo"), run: () => unarchiveRef.current(ids) });
     },
     [toast, persist]
   );
@@ -1046,16 +1075,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const addComment = useCallback(
     (taskId: string, text: string, parentId: string | null = null) => {
       const id = nextId("c");
-      const comment: Comment = { id, taskId, parentId, author: "me" as MemberId, text, at: "Just now", likedBy: [] };
+      const comment: Comment = { id, taskId, parentId, author: "me" as MemberId, text, at: tr("time.justNow"), likedBy: [] };
       setComments((c) => ({ ...c, [taskId]: [...(c[taskId] || []), comment] }));
       persist((r) => r.insertComment(comment));
-      logActivity(taskId, parentId ? `${meName()} replied to a comment` : `${meName()} commented`);
+      logActivity(taskId, parentId ? tr("store.actReplied", { name: meName() }) : tr("store.actCommented", { name: meName() }));
       // @mentions notify the mentioned member (free-features #40)
       const title = tasksRef.current.find((t) => t.id === taskId)?.title ?? "a task";
       for (const m of Object.values(membersRef.current)) {
         if (m.id !== "me" && new RegExp(`@${m.name.split(" ")[0]}\\b`, "i").test(text)) {
-          setAudit((a) => [{ id: nextId("ev"), at: Date.now(), actor: "me" as MemberId, message: `Mentioned ${m.name}`, taskId }, ...a]);
-          persist((r) => r.notifyUser(m.id, taskId, `${meName()} mentioned you on "${title}"`));
+          setAudit((a) => [{ id: nextId("ev"), at: Date.now(), actor: "me" as MemberId, message: tr("store.auditMentioned", { name: m.name }), taskId }, ...a]);
+          persist((r) => r.notifyUser(m.id, taskId, tr("store.mentionedYou", { name: meName(), title })));
         }
       }
     },
@@ -1087,7 +1116,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         name: f.name,
       }));
       setAttachments((a) => ({ ...a, [taskId]: [...(a[taskId] || []), ...items] }));
-      logActivity(taskId, `${meName()} attached ${items.length} file${items.length > 1 ? "s" : ""}`);
+      logActivity(taskId, tr("store.actAttached", { name: meName(), n: items.length }));
       list.forEach((file, i) => persist((r) => r.uploadAttachment(items[i].id, taskId, file)));
     },
     [logActivity, persist]
@@ -1152,12 +1181,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (projectId: ProjectId, status: Status) => {
       const cols = customColumns[projectId] ?? COLUMNS;
       if (cols.length <= 1) {
-        toast("A board needs at least one column.");
+        toast(tr("store.oneColumn"));
         return;
       }
       const hasTasks = tasks.some((t) => t.projectId === projectId && t.status === status);
       if (hasTasks) {
-        toast("Move or delete this column's tasks first.");
+        toast(tr("store.moveTasksFirst"));
         return;
       }
       setCustomColumns((c) => ({ ...c, [projectId]: cols.filter((col) => col[0] !== status) }));
@@ -1219,7 +1248,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setTracking((current) => {
       if (!current) return current;
       const total = finalizeTracking(current);
-      if (total > 0) logActivity(current.taskId, `${meName()} tracked ${Math.round(total / 60)}m on this task`);
+      if (total > 0) logActivity(current.taskId, tr("store.actTracked", { name: meName(), n: Math.round(total / 60) }));
       return null;
     });
   }, [finalizeTracking, logActivity]);
@@ -1259,7 +1288,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const spendAi = useCallback(() => {
     const cap = PLANS[plan].aiPerMonth;
     if (aiUses >= cap) {
-      toast(plan === "free" ? "AI features need the Pro plan" : "Monthly AI limit reached");
+      toast(plan === "free" ? tr("store.aiNeedsPro") : tr("store.aiLimit"));
       return false;
     }
     setAiUses((n) => n + 1);
@@ -1422,7 +1451,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const openNewTaskModal = useCallback(
     (projectId: ProjectId, status: Status = "todo") => {
       // A new real workspace has no boards yet; a task needs one to live on
-      if (!projects[projectId]) return toast("Create a board first");
+      if (!projects[projectId]) return toast(tr("voice.noBoard"));
       setNewTaskDefaults({ projectId, status });
     },
     [projects, toast]
@@ -1449,15 +1478,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const addInvite = useCallback(
     async (email: string, role: Member["role"]) => {
       const db = dbRef.current;
-      if (!db) return "Adding people needs the real database (demo mode).";
+      if (!db) return tr("store.inviteDemo");
       try {
         await db.insertInvite(email.trim().toLowerCase(), role);
       } catch (e) {
         const msg = (e as Error).message;
-        if (msg.includes("duplicate")) return "This email already has open access. Revoke it first to change the role.";
-        if (msg.includes("row-level security")) return "You don't have permission to grant this role.";
-        if (msg.includes("check constraint")) return "Enter a valid email address.";
-        return "Could not add this email. Please try again.";
+        if (msg.includes("duplicate")) return tr("store.inviteDuplicate");
+        if (msg.includes("row-level security")) return tr("store.inviteForbidden");
+        if (msg.includes("check constraint")) return tr("store.inviteEmail");
+        return tr("store.inviteFailed");
       }
       await refreshInvites();
       return null;
@@ -1467,12 +1496,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const updateMyName = useCallback(async (name: string) => {
     const db = dbRef.current;
     const clean = name.trim().slice(0, 80);
-    if (!clean) return "Enter your name.";
-    if (!db) return "Editing your profile needs the real database (demo mode).";
+    if (!clean) return tr("store.enterName");
+    if (!db) return tr("store.profileDemo");
     try {
       await db.updateMyName(clean);
     } catch {
-      return "Could not save your name. Please try again.";
+      return tr("store.nameFailed");
     }
     setMembers((m) => (m.me ? { ...m, me: { ...m.me, name: clean, initials: initials(clean, "") } } : m));
     return null;
@@ -1663,8 +1692,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     </Ctx.Provider>
   );
 }
-
-const PRIORITY_LABELS: Record<"h" | "m" | "l", string> = { h: "high", m: "medium", l: "low" };
 
 export const useStore = () => {
   const s = useContext(Ctx);

@@ -5,20 +5,22 @@ import { AutomationRule } from "@/types";
 import Dropdown from "@/components/Dropdown";
 import Gate from "@/components/Gate";
 import { SettingRow, Switch } from "@/components/ui";
+import { useT } from "@/i18n/I18nProvider";
+import type { MessageKey } from "@/i18n";
 
-const TRIGGERS: Record<AutomationRule["trigger"], string> = {
-  created: "a task is created",
-  priority_high: "a task becomes high priority",
-  status_done: "a task is completed",
-  assigned: "a task is reassigned",
-  overdue: "a task is overdue (run manually)",
+const TRIGGERS: Record<AutomationRule["trigger"], MessageKey> = {
+  created: "auto.trCreated",
+  priority_high: "auto.trHigh",
+  status_done: "auto.trDone",
+  assigned: "auto.trAssigned",
+  overdue: "auto.trOverdue",
 };
-const ACTIONS: Record<AutomationRule["action"], string> = {
-  notify_owner: "notify me",
-  assign_me: "assign it to me",
-  set_high: "set priority to high",
-  add_label: "add a label",
-  webhook: "send a webhook",
+const ACTIONS: Record<AutomationRule["action"], MessageKey> = {
+  notify_owner: "auto.acNotify",
+  assign_me: "auto.acAssignMe",
+  set_high: "auto.acHigh",
+  add_label: "auto.acLabel",
+  webhook: "auto.acWebhook",
 };
 
 // "When a bug becomes P0, notify me" → rule (SPEC-21 natural-language builder)
@@ -52,15 +54,19 @@ function parseRule(text: string): Omit<AutomationRule, "id" | "runs"> | null {
   return { name: text.trim(), trigger, action, param: url?.[0] ?? label?.[1], active: true };
 }
 
-const EMAIL_TEMPLATES = [
-  { name: "HR — Interview scheduled", body: "Hi {{name}}, your interview is scheduled for {{date}}. Reply to this email if you need another time." },
-  { name: "Client — Project update", body: "Hi {{client}}, your project is {{progress}}% complete. Highlights this week: {{highlights}}." },
-  { name: "Sales — Follow-up", body: "Hi {{name}}, thanks for the call on {{date}}. Here is the proposal we discussed." },
+// Bodies are stored with [[var]] in the language files (ICU uses single braces);
+// they become {{var}} for the template engine below.
+const EMAIL_TEMPLATES: { name: MessageKey; body: MessageKey }[] = [
+  { name: "auto.tplHrName", body: "auto.tplHrBody" },
+  { name: "auto.tplClientName", body: "auto.tplClientBody" },
+  { name: "auto.tplSalesName", body: "auto.tplSalesBody" },
 ];
 
 export default function Automations() {
   const { rules, addRule, toggleRule, removeRule, runOverdueRules, webhookLog, tasks, digestMode, setDigestMode, toast, openDrawer, allowed } = useStore();
   const canEdit = allowed("automation.manage");
+  const { t: tt, rich, fmt } = useT();
+  const templateBody = (i: number) => tt(EMAIL_TEMPLATES[i].body).replace(/\[\[(\w+)\]\]/g, "{{$1}}");
   const [text, setText] = useState("");
   const [trigger, setTrigger] = useState<AutomationRule["trigger"]>("priority_high");
   const [action, setAction] = useState<AutomationRule["action"]>("notify_owner");
@@ -82,35 +88,38 @@ export default function Automations() {
   }
 
   function add(rule: Omit<AutomationRule, "id" | "runs">) {
-    if (rule.action === "webhook" && !validWebhook(rule.param ?? "")) return toast("Webhook URL must be a public https:// address");
-    if (rule.action === "add_label" && !rule.param) return toast("Enter the label to add");
+    if (rule.action === "webhook" && !validWebhook(rule.param ?? "")) return toast(tt("auto.badWebhook"));
+    if (rule.action === "add_label" && !rule.param) return toast(tt("auto.enterLabel"));
     addRule(rule);
-    toast("Rule added");
+    toast(tt("auto.ruleAdded"));
   }
 
   return (
     <>
       <div className="top">
         <div>
-          <h1>Automations</h1>
-          <p className="mute">Rules run automatically when tasks change. Changes made by a rule never trigger another rule.</p>
+          <h1>{tt("auto.title")}</h1>
+          <p className="mute">{tt("auto.hint")}</p>
         </div>
       </div>
 
       <Gate id="SPEC-21">
         <div className="grid g2" style={{ marginBottom: 18 }}>
           <div className="card">
-            <h2>Describe a rule</h2>
-            <input placeholder='e.g. "When a task becomes high priority, notify me"' value={text} onChange={(e) => setText(e.target.value)} />
+            <h2>{tt("auto.describe")}</h2>
+            <input placeholder={tt("auto.describePlaceholder")} value={text} onChange={(e) => setText(e.target.value)} />
+            <p className="mute" style={{ fontSize: 12, marginTop: 4 }}>
+              {tt("auto.describeLang")}
+            </p>
             {text.trim() && (
               <p className="mute" style={{ fontSize: 13, margin: "8px 0" }}>
                 {parsed ? (
                   <>
-                    When <b>{TRIGGERS[parsed.trigger]}</b> → <b>{ACTIONS[parsed.action]}</b>
+                    {rich("auto.when", { trigger: tt(TRIGGERS[parsed.trigger]), action: tt(ACTIONS[parsed.action]) })}
                     {parsed.param ? ` (${parsed.param})` : ""}
                   </>
                 ) : (
-                  "Couldn't understand that yet — try the builder below."
+                  tt("auto.cantParse")
                 )}
               </p>
             )}
@@ -122,24 +131,24 @@ export default function Automations() {
                 setText("");
               }}
             >
-              Create rule
+              {tt("auto.createRule")}
             </button>
 
-            <h3 style={{ marginTop: 18 }}>Or build it</h3>
+            <h3 style={{ marginTop: 18 }}>{tt("auto.orBuild")}</h3>
             <div className="f2">
               <label>
-                When
-                <Dropdown value={trigger} onChange={setTrigger} options={(Object.keys(TRIGGERS) as AutomationRule["trigger"][]).map((k) => ({ value: k, label: TRIGGERS[k] }))} />
+                {tt("auto.whenLabel")}
+                <Dropdown value={trigger} onChange={setTrigger} options={(Object.keys(TRIGGERS) as AutomationRule["trigger"][]).map((k) => ({ value: k, label: tt(TRIGGERS[k]) }))} />
               </label>
               <label>
-                Then
-                <Dropdown value={action} onChange={setAction} options={(Object.keys(ACTIONS) as AutomationRule["action"][]).map((k) => ({ value: k, label: ACTIONS[k] }))} />
+                {tt("auto.thenLabel")}
+                <Dropdown value={action} onChange={setAction} options={(Object.keys(ACTIONS) as AutomationRule["action"][]).map((k) => ({ value: k, label: tt(ACTIONS[k]) }))} />
               </label>
             </div>
             {(action === "add_label" || action === "webhook") && (
               <input
                 style={{ marginTop: 8 }}
-                placeholder={action === "webhook" ? "https://hooks.example.com/pulse" : "Label, e.g. Escalated"}
+                placeholder={action === "webhook" ? "https://hooks.example.com/pulse" : tt("auto.labelPlaceholder")}
                 value={param}
                 onChange={(e) => setParam(e.target.value)}
               />
@@ -149,41 +158,41 @@ export default function Automations() {
               style={{ marginTop: 8 }}
               disabled={!canEdit}
               onClick={() => {
-                add({ name: `When ${TRIGGERS[trigger]}, ${ACTIONS[action]}${param ? ` (${param})` : ""}`, trigger, action, param: param || undefined, active: true });
+                add({ name: `${tt("auto.ruleName", { trigger: tt(TRIGGERS[trigger]), action: tt(ACTIONS[action]) })}${param ? ` (${param})` : ""}`, trigger, action, param: param || undefined, active: true });
                 setParam("");
               }}
             >
-              Add rule
+              {tt("auto.addRule")}
             </button>
           </div>
 
           <div className="card">
             <div className="meta">
-              <h2 style={{ margin: 0 }}>Rules</h2>
+              <h2 style={{ margin: 0 }}>{tt("auto.rules")}</h2>
               <button
                 className="ghost sm"
                 onClick={() => {
                   const n = runOverdueRules();
-                  toast(`Checked ${n} overdue task(s)`);
+                  toast(tt("auto.checked", { n }));
                 }}
               >
-                Run overdue rules now
+                {tt("auto.runOverdue")}
               </button>
             </div>
             {rules.map((r) => (
               <div key={r.id} className="sugg">
                 <span style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-                  <Switch label={`Rule ${r.name}`} checked={r.active} disabled={!canEdit} onChange={() => toggleRule(r.id)} />
+                  <Switch label={tt("auto.ruleSwitch", { name: r.name })} checked={r.active} disabled={!canEdit} onChange={() => toggleRule(r.id)} />
                   <span>
                     <b>{r.name}</b>
                     <br />
                     <span className="mute" style={{ fontSize: 12 }}>
-                      {TRIGGERS[r.trigger]} → {ACTIONS[r.action]} · ran {r.runs}×
+                      {tt(TRIGGERS[r.trigger])} → {tt(ACTIONS[r.action])} · {tt("auto.ran", { n: r.runs })}
                     </span>
                   </span>
                 </span>
                 <button className="ghost sm danger" disabled={!canEdit} onClick={() => removeRule(r.id)}>
-                  Remove
+                  {tt("common.remove")}
                 </button>
               </div>
             ))}
@@ -193,83 +202,83 @@ export default function Automations() {
 
       <div className="grid g2">
         <div className="card">
-          <h2>Webhook deliveries</h2>
+          <h2>{tt("auto.webhooks")}</h2>
           <Gate id="ADV-04">
             <p className="mute" style={{ fontSize: 12, marginBottom: 8 }}>
-              Deliveries are logged here. Actually sending requests needs the backend (it signs each request with HMAC and retries on failure).
+              {tt("auto.webhooksHint")}
             </p>
             {webhookLog.length ? (
               webhookLog.map((w) => (
                 <div key={w.id} className="sugg">
-                  <span className="code">{w.url}</span>
+                  <span className="code" dir="ltr">{w.url}</span>
                   <span className="mute" style={{ fontSize: 12 }}>
-                    {w.event} · {new Date(w.at).toLocaleTimeString()} · {w.ok ? "queued" : "no URL"}
+                    {w.event} · {fmt.time(w.at, { hour: "2-digit", minute: "2-digit", second: "2-digit" })} · {w.ok ? tt("auto.queued") : tt("auto.noUrl")}
                   </span>
                 </div>
               ))
             ) : (
-              <p className="mute">No deliveries yet. Add a webhook rule and trigger it.</p>
+              <p className="mute">{tt("auto.noDeliveries")}</p>
             )}
           </Gate>
         </div>
 
         <div className="card">
-          <h2>Notifications</h2>
+          <h2>{tt("auto.notifications")}</h2>
           <Gate id="NOTIF-03">
-            <SettingRow title="Smart digest" hint="Only high-priority and overdue alerts pop up in real time; everything else waits in the inbox.">
-              <Switch label="Smart digest" checked={digestMode} onChange={setDigestMode} />
+            <SettingRow title={tt("auto.digest")} hint={tt("auto.digestHint")}>
+              <Switch label={tt("auto.digest")} checked={digestMode} onChange={setDigestMode} />
             </SettingRow>
           </Gate>
           <button
             className="ghost sm"
             style={{ marginTop: 12 }}
             onClick={async () => {
-              if (!("Notification" in window)) return toast("This browser doesn't support notifications");
+              if (!("Notification" in window)) return toast(tt("auto.noBrowserNotif"));
               const p = await window.Notification.requestPermission();
-              toast(p === "granted" ? "Browser notifications on" : "Permission not granted");
+              toast(p === "granted" ? tt("auto.browserOn") : tt("auto.notGranted"));
             }}
           >
-            Enable browser notifications
+            {tt("auto.enableBrowser")}
           </button>
         </div>
 
         <div className="card">
-          <h2>Email templates</h2>
+          <h2>{tt("auto.emailTemplates")}</h2>
           <Gate id="NOTIF-01">
-            <Dropdown value={String(tpl)} onChange={(v) => setTpl(Number(v))} options={EMAIL_TEMPLATES.map((t, i) => ({ value: String(i), label: t.name }))} />
+            <Dropdown value={String(tpl)} onChange={(v) => setTpl(Number(v))} options={EMAIL_TEMPLATES.map((t, i) => ({ value: String(i), label: tt(t.name) }))} />
             <div className="f2" style={{ margin: "10px 0" }}>
-              {Array.from(EMAIL_TEMPLATES[tpl].body.matchAll(/{{(\w+)}}/g), (m) => m[1]).map((v) => (
+              {Array.from(templateBody(tpl).matchAll(/{{(\w+)}}/g), (m) => m[1]).map((v) => (
                 <label key={v}>
                   {v}
                   <input value={vars[v] ?? ""} onChange={(e) => setVars({ ...vars, [v]: e.target.value })} />
                 </label>
               ))}
             </div>
-            <pre className="doc-pre">{EMAIL_TEMPLATES[tpl].body.replace(/{{(\w+)}}/g, (_, k) => vars[k] || `{{${k}}}`)}</pre>
+            <pre className="doc-pre">{templateBody(tpl).replace(/{{(\w+)}}/g, (_, k) => vars[k] || `{{${k}}}`)}</pre>
             <button
               className="ghost sm"
               onClick={() => {
-                navigator.clipboard?.writeText(EMAIL_TEMPLATES[tpl].body.replace(/{{(\w+)}}/g, (_, k) => vars[k] || ""));
-                toast("Email copied");
+                navigator.clipboard?.writeText(templateBody(tpl).replace(/{{(\w+)}}/g, (_, k) => vars[k] || ""));
+                toast(tt("auto.emailCopied"));
               }}
             >
-              Copy email
+              {tt("auto.copyEmail")}
             </button>
           </Gate>
         </div>
 
         <div className="card">
-          <h2>Recurring tasks</h2>
+          <h2>{tt("auto.recurring")}</h2>
           <Gate id="CORE-11">
             {recurring.length ? (
               recurring.map((t) => (
                 <button key={t.id} className="row" onClick={() => openDrawer(t.id)}>
                   <span>{t.title}</span>
-                  <span className="chip">🔁 {t.recurrence}</span>
+                  <span className="chip">🔁 {t.recurrence ? tt(`drawer.${t.recurrence === "none" ? "never" : t.recurrence}`) : ""}</span>
                 </button>
               ))
             ) : (
-              <p className="mute">None yet. Set &quot;Repeats&quot; on any task.</p>
+              <p className="mute">{tt("auto.noRecurring")}</p>
             )}
           </Gate>
         </div>

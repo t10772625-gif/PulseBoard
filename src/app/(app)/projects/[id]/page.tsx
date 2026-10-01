@@ -12,31 +12,34 @@ import MultiSelectDropdown from "@/components/MultiSelectDropdown";
 import BulkBar from "@/components/BulkBar";
 import BoardMenu from "@/components/BoardMenu";
 import Gate, { PlanTag } from "@/components/Gate";
+import { useT } from "@/i18n/I18nProvider";
+import type { MessageKey } from "@/i18n";
 
-const VIEWS: { id: View; label: string; feature?: string }[] = [
-  { id: "board", label: "Board" },
-  { id: "list", label: "List" },
-  { id: "time", label: "Timeline", feature: "VIEW-05" },
-  { id: "calendar", label: "Calendar", feature: "VIEW-04" },
-  { id: "workload", label: "Workload", feature: "VIEW-06" },
-  { id: "matrix", label: "Priority matrix", feature: "AI-24" },
+const VIEWS: { id: View; label: MessageKey; feature?: string }[] = [
+  { id: "board", label: "board.viewBoard" },
+  { id: "list", label: "board.viewList" },
+  { id: "time", label: "board.viewTimeline", feature: "VIEW-05" },
+  { id: "calendar", label: "board.viewCalendar", feature: "VIEW-04" },
+  { id: "workload", label: "board.viewWorkload", feature: "VIEW-06" },
+  { id: "matrix", label: "board.viewMatrix", feature: "AI-24" },
 ];
 
 function QuickAdd({ projectId, status }: { projectId: ProjectId; status: Status }) {
   const { createTask, toast } = useStore();
+  const { t: tt } = useT();
   const [text, setText] = useState("");
   const [open, setOpen] = useState(false);
   if (!open)
     return (
       <button className="quick-add" onClick={() => setOpen(true)}>
-        ＋ Add task
+        ＋ {tt("board.addTask")}
       </button>
     );
   return (
     <input
       autoFocus
       className="quick-input"
-      placeholder="Task title, then Enter"
+      placeholder={tt("board.quickPlaceholder")}
       value={text}
       onChange={(e) => setText(e.target.value)}
       onBlur={() => !text && setOpen(false)}
@@ -44,7 +47,7 @@ function QuickAdd({ projectId, status }: { projectId: ProjectId; status: Status 
         if (e.key === "Escape") setOpen(false);
         if (e.key === "Enter" && text.trim()) {
           createTask({ projectId, status, title: text.trim() });
-          toast("Task added");
+          toast(tt("board.taskAdded"));
           setText("");
         }
       }}
@@ -83,6 +86,7 @@ export default function ProjectBoard() {
     canEdit,
     allowed,
   } = store;
+  const { t: tt, rich } = useT();
   const boardRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -119,11 +123,11 @@ export default function ProjectBoard() {
     return (
       <div className="card">
         <EmptyState
-          title="Project not found"
-          message="It may have been deleted, or you don't have access to it."
+          title={tt("board.notFound")}
+          message={tt("board.notFoundMsg")}
           action={
             <button className="btn" onClick={() => router.push("/projects")}>
-              Go to Projects
+              {tt("board.goProjects")}
             </button>
           }
         />
@@ -144,17 +148,17 @@ export default function ProjectBoard() {
   function dropOnColumn(status: Status, e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
     e.currentTarget.classList.remove("over");
-    if (!canEdit) return toast("Your role can't move tasks");
+    if (!canEdit) return toast(tt("board.cantMove"));
     const taskId = e.dataTransfer.getData("text/plain");
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
     if (status === "done" && isBlocked(task, tasks)) {
       const blocker = tasks.find((t) => t.id === task.blockedBy);
-      toast(`🔒 Blocked by "${blocker?.title}". Finish it first.`);
+      toast(tt("board.blockedBy", { title: blocker?.title ?? "" }));
       return;
     }
     setTaskField(taskId, "status", status);
-    toast("Moved to " + columnLabel(id, status));
+    toast(tt("board.movedTo", { column: columnLabel(id, status) }));
   }
 
   const allVisibleSelected = filtered.length > 0 && filtered.every((t) => selectedIds.includes(t.id));
@@ -163,7 +167,7 @@ export default function ProjectBoard() {
     <>
       <div className="top">
         <div>
-          <p className="mute">Project</p>
+          <p className="mute">{tt("board.project")}</p>
           <Dropdown
             value={id}
             onChange={(v) => router.push(`/projects/${v}`)}
@@ -173,7 +177,7 @@ export default function ProjectBoard() {
           />
         </div>
         <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-          <div style={{ width: 110 }} title="Project health">
+          <div style={{ width: 110 }} title={tt("board.health")}>
             <Ecg score={h.score} color={h.color} height={30} critical={h.critical} />
           </div>
           <b style={{ color: h.color }}>
@@ -186,14 +190,15 @@ export default function ProjectBoard() {
                 <Avatar id="ba" ring />
               </span>
               <span className="pres" style={{ margin: 0 }}>
-                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#2ECC71" }}></span>2 viewing
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#2ECC71" }}></span>
+                {tt("board.viewing", { n: 2 })}
               </span>
             </>
           )}
         </div>
       </div>
       <div style={{ marginBottom: 16 }}>
-        <HealthBreakdown health={h} prefix={`Why ${h.score}?`} />
+        <HealthBreakdown health={h} prefix={tt("dash.why", { score: h.score })} />
       </div>
 
       <div className="tool">
@@ -202,24 +207,24 @@ export default function ProjectBoard() {
             <button
               key={v.id}
               className={view === v.id ? "on" : ""}
-              onClick={() => (v.feature && !can(v.feature) ? toast(`${v.label} view needs an upgrade`) : setBoardView(v.id))}
+              onClick={() => (v.feature && !can(v.feature) ? toast(tt("board.needsUpgrade", { view: tt(v.label) })) : setBoardView(v.id))}
             >
-              {v.label}
+              {tt(v.label)}
               {v.feature && !can(v.feature) && " 🔒"}
             </button>
           ))}
         </div>
         <button className={`ghost ${boardFilters.mine ? "on" : ""}`} onClick={() => toggleBoardFilter("mine")}>
-          Only mine
+          {tt("board.onlyMine")}
         </button>
         <button className={`ghost ${boardFilters.high ? "on" : ""}`} onClick={() => toggleBoardFilter("high")}>
-          High priority
+          {tt("board.highPriority")}
         </button>
         <button className={`ghost ${boardFilters.blk ? "on" : ""}`} onClick={() => toggleBoardFilter("blk")}>
-          🔒 Blocked
+          {tt("board.blocked")}
         </button>
         <MultiSelectDropdown
-          placeholder="Assignees"
+          placeholder={tt("board.assignees")}
           values={boardFilters.assignees}
           onToggle={toggleAssigneeFilter}
           onClear={clearAssigneeFilter}
@@ -227,11 +232,11 @@ export default function ProjectBoard() {
         />
         <span className="grow"></span>
         <button className="ghost" onClick={() => setMenuOpen(true)}>
-          ⋯ Import / templates
+          {tt("board.importTemplates")}
         </button>
         {view === "board" && allowed("project.manage") && (
           <button className="ghost" onClick={() => openAddColumnModal(id)}>
-            ＋ Add column
+            ＋ {tt("board.addColumn")}
           </button>
         )}
       </div>
@@ -240,13 +245,13 @@ export default function ProjectBoard() {
         {can("VIEW-11") ? (
           <input
             className="search-q"
-            placeholder='Search: "my high tasks due tomorrow", "overdue", "#bug", assignee = me AND priority = high'
+            placeholder={tt("board.searchPlaceholder")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         ) : (
           <span className="mute" style={{ fontSize: 13 }}>
-            Smart search <Gate id="VIEW-11" compact>
+            {tt("board.smartSearch")} <Gate id="VIEW-11" compact>
               {null}
             </Gate>
           </span>
@@ -256,33 +261,33 @@ export default function ProjectBoard() {
             <Dropdown
               value=""
               onChange={(v: string) => v && setQuery(savedFilters.find((f) => f.id === v)?.query ?? "")}
-              options={[{ value: "", label: "Saved filters" }, ...savedFilters.map((f) => ({ value: f.id, label: f.name }))]}
+              options={[{ value: "", label: tt("board.savedFilters") }, ...savedFilters.map((f) => ({ value: f.id, label: f.name }))]}
             />
             {query && (
               <button
                 className="ghost"
                 onClick={() => {
-                  const name = window.prompt("Name this filter", query);
+                  const name = window.prompt(tt("board.nameFilter"), query);
                   if (name) {
                     saveFilter(name, query);
-                    toast("Filter saved");
+                    toast(tt("board.filterSaved"));
                   }
                 }}
               >
-                ☆ Save filter
+                {tt("board.saveFilter")}
               </button>
             )}
           </>
         )}
         {canEdit && (
           <button className="ghost" onClick={() => (allVisibleSelected ? clearSelection() : setSelection(filtered.map((t) => t.id)))}>
-            {allVisibleSelected ? "Clear selection" : `Select all (${filtered.length})`}
+            {allVisibleSelected ? tt("board.clearSelection") : tt("board.selectAll", { n: filtered.length })}
           </button>
         )}
       </div>
       {query && parsed.explain.length > 0 && (
         <p className="mute" style={{ fontSize: 12, margin: "-4px 0 10px" }}>
-          Showing {filtered.length} task(s) where {parsed.explain.join(" AND ")}
+          {tt("board.showing", { n: filtered.length, conditions: parsed.explain.join(` ${tt("board.and")} `) })}
         </p>
       )}
 
@@ -290,7 +295,8 @@ export default function ProjectBoard() {
 
       {view === "board" && (
         <div className="board" ref={boardRef}>
-          {columns.map(([status, label, limit]) => {
+          {columns.map(([status, , limit]) => {
+            const label = columnLabel(id, status);
             const total = tasks.filter((t) => t.projectId === id && t.status === status).length;
             const over = limit > 0 && total > limit;
             const colTasks = filtered.filter((t) => t.status === status);
@@ -310,13 +316,13 @@ export default function ProjectBoard() {
                   <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     <span
                       className={`wip ${over ? "x" : ""}`}
-                      title={over ? `${total} tasks here, over the ${limit}-task work-in-progress limit` : limit ? `WIP limit: ${limit}` : undefined}
+                      title={over ? tt("board.wipOver", { total, limit }) : limit ? tt("board.wipLimit", { limit }) : undefined}
                     >
                       {total}
                       {limit ? ` / ${limit}` : ""}
                     </span>
                     {allowed("task.create") && (
-                      <button className="ic" style={{ width: 26, height: 26 }} aria-label={`Add task to ${label}`} onClick={() => openNewTaskModal(id, status)}>
+                      <button className="ic" style={{ width: 26, height: 26 }} aria-label={tt("board.addTaskTo", { column: label })} onClick={() => openNewTaskModal(id, status)}>
                         ＋
                       </button>
                     )}
@@ -327,7 +333,7 @@ export default function ProjectBoard() {
                     colTasks.map((t) => <TaskCard key={t.id} task={t} />)
                   ) : (
                     <p className="mute" style={{ padding: "6px 4px" }}>
-                      Drop a task here.
+                      {tt("board.dropHere")}
                     </p>
                   )}
                   {allowed("task.create") && <QuickAdd projectId={id} status={status} />}
@@ -344,17 +350,17 @@ export default function ProjectBoard() {
             <tbody>
               <tr>
                 {canEdit && <th style={{ width: 28 }}></th>}
-                <th>Task</th>
-                <th>Status</th>
-                <th>Priority</th>
-                <th>Assignee</th>
-                <th>Due</th>
+                <th>{tt("board.colTask")}</th>
+                <th>{tt("common.status")}</th>
+                <th>{tt("common.priority")}</th>
+                <th>{tt("common.assignee")}</th>
+                <th>{tt("board.colDue")}</th>
               </tr>
               {filtered.map((t) => (
                 <tr key={t.id} onClick={() => openDrawer(t.id)}>
                   {canEdit && (
                     <td onClick={(e) => e.stopPropagation()}>
-                      <input type="checkbox" aria-label={`Select ${t.title}`} checked={selectedIds.includes(t.id)} onChange={() => store.toggleSelect(t.id)} />
+                      <input type="checkbox" aria-label={tt("board.select", { title: t.title })} checked={selectedIds.includes(t.id)} onChange={() => store.toggleSelect(t.id)} />
                     </td>
                   )}
                   <td>
@@ -382,10 +388,10 @@ export default function ProjectBoard() {
         <div className="card tlw">
           <div className="tlg">
             <div className="tlr" style={{ cursor: "default" }}>
-              <span className="mute">Task</span>
+              <span className="mute">{tt("board.colTask")}</span>
               <div className="ln" style={{ height: 30 }}>
                 {[-10, -5, 0, 5, 10].map((d) => (
-                  <span key={d} className="mute" style={{ position: "absolute", left: `${((d + 10) / 25) * 100}%` }}>
+                  <span key={d} className="mute" style={{ position: "absolute", insetInlineStart: `${((d + 10) / 25) * 100}%` }}>
                     {dateForOffset(d)}
                   </span>
                 ))}
@@ -393,13 +399,13 @@ export default function ProjectBoard() {
             </div>
             {filtered.map((t) => (
               <div key={t.id} className="tlr" onClick={() => openDrawer(t.id)}>
-                <span style={{ fontWeight: 700, fontSize: 13, paddingRight: 8 }}>{t.title}</span>
+                <span style={{ fontWeight: 700, fontSize: 13, paddingInlineEnd: 8 }}>{t.title}</span>
                 <div className="ln">
-                  <div className="today" style={{ left: "40%" }}></div>
+                  <div className="today" style={{ insetInlineStart: "40%" }}></div>
                   <div
                     className="bar2"
                     style={{
-                      left: `${((t.barStart + 10) / 25) * 100}%`,
+                      insetInlineStart: `${((t.barStart + 10) / 25) * 100}%`,
                       width: `${(t.lengthDays / 25) * 100}%`,
                       background: t.status === "done" ? "#9DB0BF" : isBlocked(t, tasks) ? "#E5483A" : projects[t.projectId].color,
                     }}
@@ -420,7 +426,7 @@ export default function ProjectBoard() {
 
       {menuOpen && <BoardMenu projectId={id} onClose={() => setMenuOpen(false)} />}
       <p className="mute" style={{ fontSize: 12, marginTop: 14 }}>
-        Tip: press <kbd>?</kbd> for keyboard shortcuts. Plans: Timeline/Calendar <PlanTag id="VIEW-04" />, Workload <PlanTag id="VIEW-06" />.
+        {rich("board.tip")} {tt("board.tipTimeline")} <PlanTag id="VIEW-04" />, {tt("board.viewWorkload")} <PlanTag id="VIEW-06" />.
       </p>
     </>
   );
@@ -429,12 +435,15 @@ export default function ProjectBoard() {
 // VIEW-04: month grid of due dates
 function CalendarView({ tasks }: { tasks: Task[] }) {
   const { openDrawer, projects } = useStore();
+  const { fmt } = useT();
   const first = new Date(TODAY.getFullYear(), TODAY.getMonth(), 1);
+  // Monday-first weekday names in the current language (5 Jan 2026 was a Monday)
+  const weekdays = Array.from({ length: 7 }, (_, i) => fmt.date(new Date(2026, 0, 5 + i), { weekday: "short" }));
   const startOffset = Math.round((first.getTime() - TODAY.getTime()) / 86400000) - ((first.getDay() + 6) % 7);
   const days = Array.from({ length: 42 }, (_, i) => startOffset + i);
   return (
     <div className="card cal">
-      {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+      {weekdays.map((d) => (
         <b key={d} className="cal-h">
           {d}
         </b>
@@ -447,7 +456,7 @@ function CalendarView({ tasks }: { tasks: Task[] }) {
           <div key={off} className={`cal-d ${off === 0 ? "today" : ""} ${d.getMonth() !== TODAY.getMonth() ? "dim" : ""}`}>
             <span className="cal-n">{d.getDate()}</span>
             {dayTasks.map((t) => (
-              <button key={t.id} className="cal-t" style={{ borderLeftColor: projects[t.projectId].color }} onClick={() => openDrawer(t.id)} title={t.title}>
+              <button key={t.id} className="cal-t" style={{ borderInlineStartColor: projects[t.projectId].color }} onClick={() => openDrawer(t.id)} title={t.title}>
                 {t.status === "done" ? "✓ " : ""}
                 {t.title}
               </button>
@@ -462,11 +471,12 @@ function CalendarView({ tasks }: { tasks: Task[] }) {
 // VIEW-06 + AI-02: capacity bars and rebalancing suggestions
 function WorkloadView({ projectTasks }: { projectTasks: Task[] }) {
   const { tasks, members, capacity, history, setTaskField, toast, openDrawer } = useStore();
+  const { t: tt } = useT();
   const report = workloadReport(tasks, members, capacity, history);
   return (
     <div className="grid g2">
       <div className="card">
-        <h2>Open tasks vs capacity</h2>
+        <h2>{tt("board.openVsCapacity")}</h2>
         {report.rows.map((r) => (
           <div key={r.member} className="wl-row">
             <Avatar id={r.member} />
@@ -474,17 +484,17 @@ function WorkloadView({ projectTasks }: { projectTasks: Task[] }) {
             <div className="wl-bar">
               <i style={{ width: `${Math.min(100, r.utilization)}%`, background: r.utilization > 100 ? "var(--bad)" : r.utilization > 80 ? "var(--warn)" : "var(--acc)" }} />
             </div>
-            <b style={{ width: 60, textAlign: "right", color: r.utilization > 100 ? "var(--bad)" : undefined }}>
+            <b style={{ width: 60, textAlign: "end", color: r.utilization > 100 ? "var(--bad)" : undefined }}>
               {r.open}/{r.capacity}
             </b>
           </div>
         ))}
         <p className="mute" style={{ fontSize: 12, marginTop: 8 }}>
-          {projectTasks.length} tasks in this board. Capacity is set per person on the Team page.
+          {tt("board.capacityNote", { n: projectTasks.length })}
         </p>
       </div>
       <div className="card">
-        <h2>Suggested rebalancing</h2>
+        <h2>{tt("board.rebalancing")}</h2>
         <Gate id="AI-02">
           {report.suggestions.length ? (
             report.suggestions.map((s) => {
@@ -501,16 +511,16 @@ function WorkloadView({ projectTasks }: { projectTasks: Task[] }) {
                     className="btn sm"
                     onClick={() => {
                       setTaskField(t.id, "assignee", s.to);
-                      toast(`Moved to ${members[s.to].name}`);
+                      toast(tt("board.movedToPerson", { name: members[s.to].name }));
                     }}
                   >
-                    Apply
+                    {tt("common.apply")}
                   </button>
                 </div>
               );
             })
           ) : (
-            <p className="mute">Everyone is within capacity.</p>
+            <p className="mute">{tt("board.withinCapacity")}</p>
           )}
         </Gate>
       </div>
@@ -521,12 +531,13 @@ function WorkloadView({ projectTasks }: { projectTasks: Task[] }) {
 // AI-24: Eisenhower matrix
 function MatrixView({ tasks }: { tasks: Task[] }) {
   const { openDrawer } = useStore();
+  const { t: tt } = useT();
   const m = eisenhower(tasks);
   const cells: [string, string, Task[]][] = [
-    ["Do now", "Urgent + important", m.doNow],
-    ["Schedule", "Important, not urgent", m.schedule],
-    ["Delegate", "Urgent, not important", m.delegate],
-    ["Eliminate", "Neither", m.eliminate],
+    [tt("board.doNow"), tt("board.doNowSub"), m.doNow],
+    [tt("board.schedule"), tt("board.scheduleSub"), m.schedule],
+    [tt("board.delegate"), tt("board.delegateSub"), m.delegate],
+    [tt("board.eliminate"), tt("board.eliminateSub"), m.eliminate],
   ];
   return (
     <div className="grid g2">
@@ -544,7 +555,7 @@ function MatrixView({ tasks }: { tasks: Task[] }) {
               </button>
             ))
           ) : (
-            <p className="mute">Nothing here.</p>
+            <p className="mute">{tt("board.nothingHere")}</p>
           )}
         </div>
       ))}

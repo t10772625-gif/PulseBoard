@@ -6,10 +6,12 @@ import { download, parseCsv, toCsv } from "@/lib/csv";
 import { MemberId, Priority, ProjectId } from "@/types";
 import Modal from "./Modal";
 import Gate from "./Gate";
+import { useT } from "@/i18n/I18nProvider";
 
 // Import/export and templates for one board (CORE-03, CORE-08, CORE-09, CORE-10).
 export default function BoardMenu({ projectId, onClose }: { projectId: ProjectId; onClose: () => void }) {
   const { tasks, projects, members, getColumns, columnLabel, createTask, templates, applyTemplate, saveTemplate, applyBoardTemplate, toast, createShareLink, shareLinks, revokeShareLink } = useStore();
+  const { t: tt } = useT();
   const [tplName, setTplName] = useState("");
   const [preview, setPreview] = useState<string[][] | null>(null);
   const project = projects[projectId];
@@ -24,13 +26,13 @@ export default function BoardMenu({ projectId, onClose }: { projectId: ProjectId
         return [t.title, columnLabel(projectId, t.status), t.priority, members[t.assignee].name, d.toISOString().slice(0, 10), t.labels.join(";"), t.description];
       });
     download(`${project.name}.csv`, toCsv([["Title", "Status", "Priority", "Assignee", "Due", "Labels", "Description"], ...rows]));
-    toast(`Exported ${rows.length} tasks`);
+    toast(tt("boardMenu.exported", { n: rows.length }));
   }
 
   function onFile(file: File) {
     file.text().then((text) => {
       const rows = parseCsv(text);
-      if (rows.length < 2) return toast("No rows found in that CSV");
+      if (rows.length < 2) return toast(tt("boardMenu.noRows"));
       setPreview(rows);
     });
   }
@@ -40,7 +42,7 @@ export default function BoardMenu({ projectId, onClose }: { projectId: ProjectId
     const header = preview[0].map((h) => h.trim().toLowerCase());
     const col = (name: string) => header.findIndex((h) => h.includes(name));
     const [iTitle, iStatus, iPri, iAss, iDue, iLab, iDesc] = ["title", "status", "priority", "assignee", "due", "label", "desc"].map(col);
-    if (iTitle < 0) return toast('The CSV needs a "Title" column');
+    if (iTitle < 0) return toast(tt("boardMenu.needTitle"));
     let n = 0;
     for (const r of preview.slice(1)) {
       const title = r[iTitle]?.trim();
@@ -59,47 +61,45 @@ export default function BoardMenu({ projectId, onClose }: { projectId: ProjectId
         priority,
         assignee,
         dueOffset: due,
-        labels: iLab >= 0 && r[iLab] ? r[iLab].split(/[;|]/).map((s) => s.trim()).filter(Boolean) : ["Imported"],
+        labels: iLab >= 0 && r[iLab] ? r[iLab].split(/[;|]/).map((s) => s.trim()).filter(Boolean) : [tt("boardMenu.importedLabel")],
         description: iDesc >= 0 ? r[iDesc] ?? "" : "",
       });
       n++;
     }
-    toast(`Imported ${n} tasks`);
+    toast(tt("boardMenu.imported", { n }));
     setPreview(null);
     onClose();
   }
 
   return (
-    <Modal title={`${project.name}: board tools`} onClose={onClose}>
+    <Modal title={tt("boardMenu.title", { name: project.name })} onClose={onClose}>
       <div style={{ display: "grid", gap: 18 }}>
         <section>
-          <h3>Import &amp; export</h3>
+          <h3>{tt("boardMenu.importExport")}</h3>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button className="ghost" onClick={exportCsv}>
-              ⬇ Export CSV
+              {tt("boardMenu.exportCsv")}
             </button>
             <label className="ghost" style={{ cursor: "pointer" }}>
-              ⬆ Import CSV
+              {tt("boardMenu.importCsv")}
               <input type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
             </label>
           </div>
           {preview && (
             <div className="card" style={{ marginTop: 10, padding: 10 }}>
-              <p className="mute">
-                {preview.length - 1} rows · columns: {preview[0].join(", ")}
-              </p>
+              <p className="mute">{tt("boardMenu.preview", { n: preview.length - 1, columns: preview[0].join(", ") })}</p>
               <button className="btn" style={{ marginTop: 8 }} onClick={importRows}>
-                Create {preview.length - 1} tasks
+                {tt("boardMenu.createN", { n: preview.length - 1 })}
               </button>
             </div>
           )}
           <p className="mute" style={{ fontSize: 12, marginTop: 6 }}>
-            Columns: Title (required), Status, Priority, Assignee, Due (YYYY-MM-DD), Labels (separated by ;), Description. Today is {dateForOffset(0)}.
+            {tt("boardMenu.csvHelp", { today: dateForOffset(0) })}
           </p>
         </section>
 
         <section>
-          <h3>Task templates</h3>
+          <h3>{tt("boardMenu.taskTemplates")}</h3>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {templates.map((t) => (
               <button
@@ -107,7 +107,7 @@ export default function BoardMenu({ projectId, onClose }: { projectId: ProjectId
                 className="ghost"
                 onClick={() => {
                   const n = applyTemplate(t.id, projectId);
-                  toast(`Added ${n} tasks from "${t.name}"`);
+                  toast(tt("boardMenu.addedFromTpl", { n, name: t.name }));
                   onClose();
                 }}
               >
@@ -116,23 +116,23 @@ export default function BoardMenu({ projectId, onClose }: { projectId: ProjectId
             ))}
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            <input placeholder="Save this board as a template…" value={tplName} onChange={(e) => setTplName(e.target.value)} />
+            <input placeholder={tt("boardMenu.saveAsTpl")} value={tplName} onChange={(e) => setTplName(e.target.value)} />
             <button
               className="btn"
               onClick={() => {
-                if (!tplName.trim()) return toast("Name the template first");
+                if (!tplName.trim()) return toast(tt("boardMenu.nameTpl"));
                 saveTemplate(tplName.trim(), projectId);
                 setTplName("");
-                toast("Template saved");
+                toast(tt("boardMenu.tplSaved"));
               }}
             >
-              Save
+              {tt("common.save")}
             </button>
           </div>
         </section>
 
         <section>
-          <h3>Share &amp; embed</h3>
+          <h3>{tt("boardMenu.shareEmbed")}</h3>
           <div style={{ display: "grid", gap: 8 }}>
             <Gate id="COL-05">
               <button
@@ -140,10 +140,10 @@ export default function BoardMenu({ projectId, onClose }: { projectId: ProjectId
                 onClick={() => {
                   const token = createShareLink("board", projectId);
                   navigator.clipboard?.writeText(`${window.location.origin}/share/${token}`);
-                  toast("Read-only board link copied");
+                  toast(tt("boardMenu.boardLinkCopied"));
                 }}
               >
-                🔗 Copy read-only board link
+                {tt("boardMenu.copyBoardLink")}
               </button>
             </Gate>
             <Gate id="SPEC-26">
@@ -151,14 +151,14 @@ export default function BoardMenu({ projectId, onClose }: { projectId: ProjectId
                 className="ghost"
                 onClick={() => {
                   navigator.clipboard?.writeText(`${window.location.origin}/submit/${projectId}`);
-                  toast("Public bug report form link copied");
+                  toast(tt("boardMenu.formCopied"));
                 }}
               >
-                🐞 Copy public bug report form link
+                {tt("boardMenu.copyForm")}
               </button>
             </Gate>
             <Gate id="COL-06">
-              <p className="code">{`<iframe src="${typeof window !== "undefined" ? window.location.origin : ""}/embed/${projectId}" width="100%" height="420" style="border:0"></iframe>`}</p>
+              <p className="code" dir="ltr">{`<iframe src="${typeof window !== "undefined" ? window.location.origin : ""}/embed/${projectId}" width="100%" height="420" style="border:0"></iframe>`}</p>
             </Gate>
             {shareLinks.filter((l) => !l.revoked && l.targetId === projectId).length > 0 && (
               <div>
@@ -168,7 +168,7 @@ export default function BoardMenu({ projectId, onClose }: { projectId: ProjectId
                     <div key={l.token} className="sugg">
                       <span className="code">/share/{l.token.slice(0, 10)}…</span>
                       <button className="ghost sm danger" onClick={() => revokeShareLink(l.token)}>
-                        Revoke
+                        {tt("boardMenu.revoke")}
                       </button>
                     </div>
                   ))}
@@ -178,7 +178,7 @@ export default function BoardMenu({ projectId, onClose }: { projectId: ProjectId
         </section>
 
         <section>
-          <h3>Industry board templates</h3>
+          <h3>{tt("boardMenu.industry")}</h3>
           <Gate id="CORE-03">
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {BOARD_TEMPLATES.map((bt) => (
@@ -187,9 +187,9 @@ export default function BoardMenu({ projectId, onClose }: { projectId: ProjectId
                   className="ghost"
                   title={bt.columns.map((c) => c[0]).join(" → ")}
                   onClick={() => {
-                    if (!window.confirm(`Replace this board's columns with the ${bt.name} template? Tasks in removed columns move to the first column.`)) return;
+                    if (!window.confirm(tt("boardMenu.replaceConfirm", { name: bt.name }))) return;
                     applyBoardTemplate(projectId, bt.columns);
-                    toast(`${bt.name} columns applied`);
+                    toast(tt("boardMenu.applied", { name: bt.name }));
                     onClose();
                   }}
                 >

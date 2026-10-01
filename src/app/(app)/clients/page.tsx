@@ -7,10 +7,12 @@ import Dropdown from "@/components/Dropdown";
 import Gate from "@/components/Gate";
 import { EmptyState } from "@/components/ui";
 import { download } from "@/lib/csv";
+import { useT } from "@/i18n/I18nProvider";
 
 export default function Clients() {
   const { clients, addClient, updateClient, projects, tasks, branding, createShareLink, toast, openDrawer, updateTask, can, allowed } = useStore();
   const canEdit = allowed("client.manage");
+  const { t: tt, fmt } = useT();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [projectId, setProjectId] = useState<ProjectId>(Object.keys(projects)[0]);
@@ -22,11 +24,11 @@ export default function Clients() {
   // One-click onboarding (CLI-02): client record + portal link + weekly report in one step
   function onboard(e: FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !/^\S+@\S+\.\S+$/.test(email)) return toast("Enter a client name and a valid email");
+    if (!name.trim() || !/^\S+@\S+\.\S+$/.test(email)) return toast(tt("clients.enterValid"));
     addClient({ name: name.trim(), email: email.trim(), projectId, hourlyRate: 40, budget: 2000, reportDay: "Fri" });
     const token = createShareLink("board", projectId);
     navigator.clipboard?.writeText(`${window.location.origin}/share/${token}`);
-    toast(`${name} onboarded: portal link copied, Friday report scheduled`);
+    toast(tt("clients.onboarded", { name }));
     setName("");
     setEmail("");
   }
@@ -34,23 +36,23 @@ export default function Clients() {
   function portal(c: Client) {
     const token = createShareLink("board", c.projectId);
     navigator.clipboard?.writeText(`${window.location.origin}/share/${token}`);
-    toast("Client portal link copied");
+    toast(tt("clients.portalCopied"));
   }
 
   function reportText(c: Client) {
     const ts = tasks.filter((t) => t.projectId === c.projectId);
     const h = health(c.projectId, tasks);
     return [
-      `${branding.name} — ${projects[c.projectId].name} progress report`,
-      `For ${c.name} · ${dateForOffset(-6)}–${dateForOffset(0)}`,
+      tt("clients.rTitle", { brand: branding.name, project: projects[c.projectId].name }),
+      tt("clients.rFor", { client: c.name, from: dateForOffset(-6), to: dateForOffset(0) }),
       "",
-      `Health: ${h.score} (${h.label})`,
-      `✅ Done: ${ts.filter((t) => t.status === "done").length}`,
-      `🔄 In progress: ${ts.filter((t) => t.status === "prog" || t.status === "rev").length}`,
-      `⏳ To do: ${ts.filter((t) => t.status === "todo").length}`,
-      `⏱ Billable hours: ${billedHours(c).toFixed(1)}h (${(billedHours(c) * c.hourlyRate).toFixed(0)} of ${c.budget} budget)`,
+      tt("clients.rHealth", { score: h.score, label: h.label }),
+      tt("clients.rDone", { n: ts.filter((t) => t.status === "done").length }),
+      tt("clients.rProgress", { n: ts.filter((t) => t.status === "prog" || t.status === "rev").length }),
+      tt("clients.rTodo", { n: ts.filter((t) => t.status === "todo").length }),
+      tt("clients.rBillable", { hours: fmt.number(billedHours(c), { maximumFractionDigits: 1 }), spent: fmt.number(Math.round(billedHours(c) * c.hourlyRate)), budget: fmt.number(c.budget) }),
       "",
-      "Recently completed:",
+      tt("clients.rRecent"),
       ...ts.filter((t) => t.status === "done").slice(0, 5).map((t) => `- ${t.title}`),
     ].join("\n");
   }
@@ -59,40 +61,40 @@ export default function Clients() {
     <>
       <div className="top">
         <div>
-          <h1>Clients</h1>
-          <p className="mute">Client portals, approvals, budgets and reports.</p>
+          <h1>{tt("clients.title")}</h1>
+          <p className="mute">{tt("clients.hint")}</p>
         </div>
       </div>
 
       <Gate id="CLI-01">
         <div className="grid g2" style={{ marginBottom: 18 }}>
           <div className="card">
-            <h2>Onboard a client</h2>
+            <h2>{tt("clients.onboardTitle")}</h2>
             <Gate id="CLI-02">
               <form onSubmit={onboard} style={{ display: "grid", gap: 10 }}>
                 <div className="f2">
                   <label>
-                    Name
-                    <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Client company" />
+                    {tt("common.name")}
+                    <input value={name} onChange={(e) => setName(e.target.value)} placeholder={tt("clients.companyPlaceholder")} />
                   </label>
                   <label>
-                    Email
-                    <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="client@example.com" />
+                    {tt("common.email")}
+                    <input dir="ltr" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="client@example.com" />
                   </label>
                 </div>
                 <label>
-                  Project
+                  {tt("common.project")}
                   <Dropdown value={projectId} onChange={setProjectId} options={Object.keys(projects).map((p) => ({ value: p, label: projects[p].name }))} />
                 </label>
                 <button className="btn" disabled={!canEdit}>
-                  Onboard in one click
+                  {tt("clients.onboardBtn")}
                 </button>
-                <p className="mute" style={{ fontSize: 12 }}>Creates the client, copies a read-only portal link, and schedules a Friday report. Emails aren&apos;t actually sent (no mail service connected).</p>
+                <p className="mute" style={{ fontSize: 12 }}>{tt("clients.onboardNote")}</p>
               </form>
             </Gate>
           </div>
           <div className="card">
-            <h2>Waiting for client approval</h2>
+            <h2>{tt("clients.waiting")}</h2>
             <Gate id="CLI-03">
               {pending.length ? (
                 pending.map((t) => (
@@ -101,26 +103,26 @@ export default function Clients() {
                       {t.title}
                     </button>
                     <span className="pill-row">
-                      <button className="btn sm" onClick={() => updateTask(t.id, { approval: "approved" }, "Client approved this")}>
-                        Approve (as client)
+                      <button className="btn sm" onClick={() => updateTask(t.id, { approval: "approved" }, tt("clients.actApproved"))}>
+                        {tt("clients.approve")}
                       </button>
-                      <button className="ghost sm" onClick={() => updateTask(t.id, { approval: "rejected" }, "Client requested changes")}>
-                        Request changes
+                      <button className="ghost sm" onClick={() => updateTask(t.id, { approval: "rejected" }, tt("clients.actChanges"))}>
+                        {tt("clients.requestChanges")}
                       </button>
                     </span>
                   </div>
                 ))
               ) : (
-                <p className="mute">No pending approvals. Use &quot;Request client approval&quot; on a task.</p>
+                <p className="mute">{tt("clients.noPending")}</p>
               )}
             </Gate>
           </div>
         </div>
 
-        <h2>All clients</h2>
+        <h2>{tt("clients.all")}</h2>
         <Gate id="CLI-07">
           <div className="grid g2" style={{ marginBottom: 18 }}>
-            {clients.length === 0 && <EmptyState title="No clients yet" message="Clients you add will show their budgets, hours and reports here." />}
+            {clients.length === 0 && <EmptyState title={tt("clients.empty")} message={tt("clients.emptyMsg")} />}
             {clients.map((c) => {
               const hours = billedHours(c);
               const spent = hours * c.hourlyRate;
@@ -134,61 +136,61 @@ export default function Clients() {
                       {projects[c.projectId]?.name} · {h.score}
                     </span>
                   </div>
-                  <p className="mute" style={{ fontSize: 13, margin: "6px 0" }}>
+                  <p className="mute" style={{ fontSize: 13, margin: "6px 0" }} dir="ltr">
                     {c.email}
                   </p>
                   <Gate id="CLI-05">
                     <div className="wl-row">
-                      <span style={{ fontSize: 13, width: 70 }}>Budget</span>
+                      <span style={{ fontSize: 13, width: 70 }}>{tt("clients.budget")}</span>
                       <div className="wl-bar">
                         <i style={{ width: `${Math.min(100, pct)}%`, background: pct >= 100 ? "var(--bad)" : pct >= 80 ? "var(--warn)" : "var(--acc)" }} />
                       </div>
                       <b>{pct}%</b>
                     </div>
                     <p className="mute" style={{ fontSize: 12 }}>
-                      {hours.toFixed(1)} billable h × {c.hourlyRate}/h = {spent.toFixed(0)} of {c.budget}
-                      {pct >= 80 && <b style={{ color: "var(--bad)" }}> · ⚠️ {pct >= 100 ? "over budget" : "80% used"}</b>}
+                      {tt("clients.budgetLine", { hours: fmt.number(hours, { maximumFractionDigits: 1 }), rate: fmt.number(c.hourlyRate), spent: fmt.number(Math.round(spent)), budget: fmt.number(c.budget) })}
+                      {pct >= 80 && <b style={{ color: "var(--bad)" }}> · ⚠️ {pct >= 100 ? tt("clients.overBudget") : tt("clients.used80")}</b>}
                     </p>
                   </Gate>
                   <div className="f2" style={{ margin: "10px 0" }}>
                     <label>
-                      Rate / h
+                      {tt("clients.rate")}
                       <input type="number" min={0} value={c.hourlyRate} disabled={!can("CLI-04") || !canEdit} onChange={(e) => updateClient(c.id, { hourlyRate: Number(e.target.value) })} />
                     </label>
                     <label>
-                      Budget
+                      {tt("clients.budget")}
                       <input type="number" min={0} value={c.budget} disabled={!can("CLI-05") || !canEdit} onChange={(e) => updateClient(c.id, { budget: Number(e.target.value) })} />
                     </label>
                     <label>
-                      Auto report
+                      {tt("clients.autoReport")}
                       <Dropdown<Client["reportDay"]>
                         value={c.reportDay}
                         disabled={!can("NOTIF-06") || !canEdit}
                         onChange={(v) => updateClient(c.id, { reportDay: v })}
                         options={[
-                          { value: "Fri", label: "Every Friday" },
-                          { value: "Mon", label: "Every Monday" },
-                          { value: "none", label: "Off" },
+                          { value: "Fri", label: tt("clients.everyFri") },
+                          { value: "Mon", label: tt("clients.everyMon") },
+                          { value: "none", label: tt("common.off") },
                         ]}
                       />
                     </label>
                   </div>
                   <div className="pill-row">
                     <button className="ghost sm" onClick={() => portal(c)} disabled={!can("SPEC-25")}>
-                      Copy portal link {!can("SPEC-25") && "🔒"}
+                      {tt("clients.copyPortal")} {!can("SPEC-25") && "🔒"}
                     </button>
                     <button className="ghost sm" onClick={() => setReport(c)} disabled={!can("NOTIF-06")}>
-                      Preview report
+                      {tt("clients.previewReport")}
                     </button>
                     <button
                       className="ghost sm"
                       onClick={() => {
                         navigator.clipboard?.writeText(`${window.location.origin}/submit/${c.projectId}`);
-                        toast("Feedback form link copied");
+                        toast(tt("clients.formCopied"));
                       }}
                       disabled={!can("CLI-08")}
                     >
-                      Feedback form link
+                      {tt("clients.formLink")}
                     </button>
                   </div>
                 </div>
@@ -200,8 +202,8 @@ export default function Clients() {
         {report && (
           <div className="card" style={{ borderTop: `4px solid ${branding.color}` }}>
             <div className="meta">
-              <h2 style={{ margin: 0 }}>Report preview: {report.name}</h2>
-              <button className="ic" aria-label="Close preview" onClick={() => setReport(null)}>
+              <h2 style={{ margin: 0 }}>{tt("clients.reportPreview", { name: report.name })}</h2>
+              <button className="ic" aria-label={tt("clients.closePreview")} onClick={() => setReport(null)}>
                 ✕
               </button>
             </div>
@@ -213,10 +215,10 @@ export default function Clients() {
             </pre>
             <div className="pill-row">
               <button className="ghost sm" onClick={() => download(`${report.name}-report.txt`, reportText(report), "text/plain")}>
-                Download
+                {tt("clients.download")}
               </button>
               <button className="ghost sm" onClick={() => window.print()} disabled={!can("CLI-06")}>
-                Print / save as PDF (branded)
+                {tt("clients.print")}
               </button>
             </div>
           </div>

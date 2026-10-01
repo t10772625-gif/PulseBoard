@@ -3,36 +3,36 @@ import { useRouter } from "next/navigation";
 import { useStore, health } from "@/lib/store";
 import { ProjectId } from "@/types";
 import { Avatar, Ecg, EmptyState, HealthBreakdown } from "@/components/ui";
+import { useT } from "@/i18n/I18nProvider";
 
 export default function Projects() {
   const { tasks, projects, openNewProjectModal, allowed } = useStore();
   const router = useRouter();
+  const { t: tt } = useT();
   const ids = Object.keys(projects) as ProjectId[];
 
   return (
     <>
       <div className="top">
         <div>
-          <h1>Projects</h1>
-          <p className="mute">
-            {ids.length} active project{ids.length === 1 ? "" : "s"} in your workspace
-          </p>
+          <h1>{tt("nav.projects")}</h1>
+          <p className="mute">{tt("projects.count", { n: ids.length })}</p>
         </div>
         {allowed("project.manage") && (
           <button className="btn" onClick={openNewProjectModal}>
-            ＋ New project
+            ＋ {tt("projects.new")}
           </button>
         )}
       </div>
       <div className="grid g3">
         {ids.length === 0 && (
           <EmptyState
-            title="No projects yet"
-            message={allowed("project.manage") ? "Create your first project to start adding tasks." : "Nothing has been shared with you yet. Ask your admin to add you to a project."}
+            title={tt("dash.noProjects")}
+            message={allowed("project.manage") ? tt("projects.emptyManage") : tt("projects.emptyView")}
             action={
               allowed("project.manage") ? (
                 <button className="btn" onClick={openNewProjectModal}>
-                  ＋ New project
+                  ＋ {tt("projects.new")}
                 </button>
               ) : undefined
             }
@@ -59,7 +59,7 @@ export default function Projects() {
                 </span>
               </div>
               <p className="mute" style={{ margin: "4px 0 10px" }}>
-                {projects[k].description || "No description yet."}
+                {projects[k].description || tt("projects.noDescription")}
               </p>
               <Ecg score={h.score} color={h.color} height={34} critical={h.critical} />
               <HealthBreakdown health={h} />
@@ -67,9 +67,7 @@ export default function Projects() {
                 <i style={{ width: `${h.total ? (h.done / h.total) * 100 : 0}%`, background: projects[k].color }} />
               </div>
               <div className="meta">
-                <span className="mute">
-                  {h.done} of {h.total} done
-                </span>
+                <span className="mute">{tt("dash.pulseLine2", { done: h.done, total: h.total })}</span>
                 <span className="stack">
                   {assignees.map((a) => (
                     <Avatar key={a} id={a} />

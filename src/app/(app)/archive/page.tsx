@@ -1,22 +1,24 @@
 "use client";
 import { useStore } from "@/lib/store";
+import { useT } from "@/i18n/I18nProvider";
 
 // Archived tasks (CORE-21) and recently deleted tasks (CORE-22)
 export default function ArchivePage() {
   const { archived, unarchiveTasks, trash, restoreTasks, purgeTrash, projects, toast, allowed } = useStore();
+  const { t: tt, fmt } = useT();
   const canArchive = allowed("task.archive");
   const canDelete = allowed("task.delete");
   return (
     <>
       <div className="top">
         <div>
-          <h1>Archive &amp; trash</h1>
-          <p className="mute">Archived tasks are hidden from boards but kept. Deleted tasks can be restored until you empty the trash.</p>
+          <h1>{tt("archive.title")}</h1>
+          <p className="mute">{tt("archive.hint")}</p>
         </div>
       </div>
       <div className="grid g2">
         <div className="card">
-          <h2>Archived ({archived.length})</h2>
+          <h2>{tt("archive.archived", { n: archived.length })}</h2>
           {archived.length ? (
             archived.map((t) => (
               <div key={t.id} className="sugg">
@@ -28,30 +30,30 @@ export default function ArchivePage() {
                   disabled={!canArchive}
                   onClick={() => {
                     unarchiveTasks([t.id]);
-                    toast("Restored to the board");
+                    toast(tt("archive.restoredBoard"));
                   }}
                 >
-                  Restore
+                  {tt("archive.restore")}
                 </button>
               </div>
             ))
           ) : (
-            <p className="mute">Nothing archived.</p>
+            <p className="mute">{tt("archive.nothing")}</p>
           )}
         </div>
         <div className="card">
           <div className="meta">
-            <h2 style={{ margin: 0 }}>Trash ({trash.length})</h2>
+            <h2 style={{ margin: 0 }}>{tt("archive.trash", { n: trash.length })}</h2>
             {trash.length > 0 && canDelete && (
               <button
                 className="ghost sm danger"
                 onClick={() => {
-                  if (!window.confirm("Permanently delete everything in the trash?")) return;
+                  if (!window.confirm(tt("archive.emptyConfirm"))) return;
                   purgeTrash();
-                  toast("Trash emptied");
+                  toast(tt("archive.emptied"));
                 }}
               >
-                Empty trash
+                {tt("archive.emptyTrash")}
               </button>
             )}
           </div>
@@ -61,7 +63,7 @@ export default function ArchivePage() {
                 <span>
                   <b>{x.task.title}</b>{" "}
                   <span className="mute">
-                    {projects[x.task.projectId]?.name} · deleted {new Date(x.deletedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    {projects[x.task.projectId]?.name} · {tt("archive.deletedAt", { time: fmt.time(x.deletedAt) })}
                   </span>
                 </span>
                 <button
@@ -69,15 +71,15 @@ export default function ArchivePage() {
                   disabled={!canDelete}
                   onClick={() => {
                     restoreTasks([x.task.id]);
-                    toast("Task restored with its comments and files");
+                    toast(tt("archive.restoredAll"));
                   }}
                 >
-                  Restore
+                  {tt("archive.restore")}
                 </button>
               </div>
             ))
           ) : (
-            <p className="mute">Trash is empty.</p>
+            <p className="mute">{tt("archive.trashEmpty")}</p>
           )}
         </div>
       </div>

@@ -5,17 +5,20 @@ import { useStore, liveTrackedSeconds } from "@/lib/store";
 import { formatDuration } from "@/lib/mock-data";
 import { useTick } from "@/lib/useTick";
 import Modal from "./Modal";
+import { useT } from "@/i18n/I18nProvider";
+import type { MessageKey } from "@/i18n";
 
-const SHORTCUTS: [string, string][] = [
-  ["C", "Create a task in the current project"],
-  ["/", "Search / command palette (also Ctrl K)"],
-  ["G then H / P / D / I / T / A", "Go to Home, Projects, My Day, Inbox, Team, Analytics"],
-  ["F", "Focus on the open task"],
-  ["Shift + click", "Select tasks on the board"],
-  ["Delete", "Delete selected tasks (undo available)"],
-  ["E", "Archive selected tasks"],
-  ["Esc", "Close / clear selection"],
-  ["?", "Show this list"],
+// Keys stay as printed on the keyboard; descriptions are translated
+const SHORTCUTS: [string, MessageKey][] = [
+  ["C", "keys.c"],
+  ["/", "keys.slash"],
+  ["G then H / P / D / I / T / A", "keys.g"],
+  ["F", "keys.f"],
+  ["Shift + click", "keys.shiftClick"],
+  ["Delete", "keys.delete"],
+  ["E", "keys.e"],
+  ["Esc", "keys.esc"],
+  ["?", "keys.help"],
 ];
 
 function typing(e: KeyboardEvent) {
@@ -29,6 +32,7 @@ function typing(e: KeyboardEvent) {
 export default function GlobalFeatures() {
   const router = useRouter();
   const s = useStore();
+  const { t: tt } = useT();
   const [help, setHelp] = useState(false);
   const [goMode, setGoMode] = useState(false);
 
@@ -65,12 +69,12 @@ export default function GlobalFeatures() {
   return (
     <>
       {help && (
-        <Modal title="Keyboard shortcuts" onClose={() => setHelp(false)}>
+        <Modal title={tt("keys.title")} onClose={() => setHelp(false)}>
           <div className="kbd-grid">
             {SHORTCUTS.map(([k, d]) => (
               <div key={k} style={{ display: "contents" }}>
-                <kbd>{k}</kbd>
-                <span>{d}</span>
+                <kbd dir="ltr">{k}</kbd>
+                <span>{tt(d)}</span>
               </div>
             ))}
           </div>
@@ -84,6 +88,7 @@ export default function GlobalFeatures() {
 function FocusMode() {
   const { focusTaskId, setFocusTaskId, tasks, projects, toggleSubtask, tracking, startTracking, pauseTracking, setDnd, dndUntil, timerSeconds, timerRunning, toggleTimer, resetTimer } = useStore();
   const task = tasks.find((t) => t.id === focusTaskId);
+  const { t: tt } = useT();
   useTick(!!tracking && tracking.status === "running");
   useEffect(() => {
     // Entering focus mode mutes notifications for an hour (TIME-04) unless already muted
@@ -95,14 +100,14 @@ function FocusMode() {
   const ss = String(timerSeconds % 60).padStart(2, "0");
   const running = tracking?.taskId === task.id && tracking.status === "running";
   return (
-    <div className="focus-ov" role="dialog" aria-modal="true" aria-label="Focus mode">
+    <div className="focus-ov" role="dialog" aria-modal="true" aria-label={tt("focus.label")}>
       <div className="card focus-card">
         <div className="meta">
           <span className="chip" style={{ color: projects[task.projectId].color }}>
             {projects[task.projectId].name}
           </span>
           <button className="ghost" onClick={() => setFocusTaskId(null)}>
-            Exit focus (Esc)
+            {tt("focus.exit")}
           </button>
         </div>
         <h1 style={{ margin: "14px 0" }}>{task.title}</h1>
@@ -116,21 +121,21 @@ function FocusMode() {
           ))}
         </div>
         <div className="pill-row">
-          <span className="timer" style={{ fontSize: 34 }}>
+          <span className="timer" style={{ fontSize: 34 }} dir="ltr">
             {mm}:{ss}
           </span>
           <button className="btn" onClick={toggleTimer}>
-            {timerRunning ? "Pause" : "Start 25-min focus"}
+            {timerRunning ? tt("focus.pause") : tt("focus.start")}
           </button>
           <button className="ghost" onClick={() => resetTimer(1500)}>
-            Reset
+            {tt("focus.reset")}
           </button>
           <button className="ghost" onClick={() => (running ? pauseTracking() : startTracking(task.id))}>
-            {running ? "⏸ Stop tracking" : "▶ Track time"} · {formatDuration(liveTrackedSeconds(task, tracking))}
+            {running ? tt("focus.stopTracking") : tt("focus.track")} · {formatDuration(liveTrackedSeconds(task, tracking))}
           </button>
         </div>
         <p className="mute" style={{ fontSize: 12, marginTop: 14 }}>
-          🔕 Notifications are muted while you focus. Everything else is hidden.
+          {tt("focus.muted")}
         </p>
       </div>
     </div>

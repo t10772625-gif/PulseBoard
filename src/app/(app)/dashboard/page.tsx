@@ -7,20 +7,23 @@ import { TODAY, dateForOffset } from "@/lib/mock-data";
 import { ProjectId } from "@/types";
 import { Avatar, DueLabel, Ecg, EmptyState, HealthBreakdown, Switch } from "@/components/ui";
 import { Legend, LineChart, Series } from "@/components/Charts";
+import { useT } from "@/i18n/I18nProvider";
+import type { MessageKey } from "@/i18n";
 
 const WIDGETS = [
-  ["catch", "Catch me up"],
-  ["pulse", "Project pulse"],
-  ["burndown", "Burndown"],
-  ["next", "Up next"],
-  ["actions", "Next best actions"],
-  ["reminders", "Smart reminders"],
-] as const;
+  ["catch", "dash.wCatch"],
+  ["pulse", "dash.wPulse"],
+  ["burndown", "dash.wBurndown"],
+  ["next", "dash.wNext"],
+  ["actions", "dash.wActions"],
+  ["reminders", "dash.wReminders"],
+] as const satisfies readonly (readonly [string, MessageKey])[];
 type WidgetId = (typeof WIDGETS)[number][0];
 
 export default function Dashboard() {
   const { tasks, openDrawer, projects, can, members, realMode } = useStore();
-  const firstName = members.me?.name.split(" ")[0] ?? "there";
+  const { t: tt, rich, fmt } = useT();
+  const firstName = members.me?.name.split(" ")[0] ?? tt("dash.there");
   const router = useRouter();
   const [hidden, setHidden] = useState<WidgetId[]>([]);
   const [customizing, setCustomizing] = useState(false);
@@ -54,8 +57,8 @@ export default function Dashboard() {
   const labels = [...days.map((d) => dateForOffset(-d)), ...Array.from({ length: sprintEnd }, (_, i) => dateForOffset(i + 1))];
   const ideal = labels.map((_, i) => Math.max(0, Math.round((idealStart * (labels.length - 1 - i)) / (labels.length - 1))));
   const burn: Series[] = [
-    { name: "Ideal", color: "var(--mute)", values: ideal, dashed: true },
-    { name: "Remaining", color: "#12B5A0", values: remaining, fill: true },
+    { name: tt("dash.ideal"), color: "var(--mute)", values: ideal, dashed: true },
+    { name: tt("dash.remaining"), color: "#12B5A0", values: remaining, fill: true },
   ];
   const ahead = ideal[days.length - 1] - remaining[remaining.length - 1];
 
@@ -66,12 +69,12 @@ export default function Dashboard() {
       const blocker = t.blockedBy ? tasks.find((b) => b.id === t.blockedBy) : undefined;
       const left = t.subtasks.filter((s) => !s[1]).length;
       const context = isBlocked(t, tasks)
-        ? `Blocked by "${blocker!.title}" — ping ${blocker!.assignee === "me" ? "yourself" : "its owner"}.`
+        ? tt("dash.remBlocked", { title: blocker!.title, who: blocker!.assignee === "me" ? tt("dash.yourself") : tt("dash.itsOwner") })
         : left
-          ? `${left} subtask(s) left.`
+          ? tt("dash.remSubtasks", { n: left })
           : t.status === "rev"
-            ? "Waiting on review — nudge the reviewer."
-            : "Ready to finish.";
+            ? tt("dash.remReview")
+            : tt("dash.remReady");
       return { t, context };
     });
 
@@ -79,8 +82,8 @@ export default function Dashboard() {
     <>
       <div className="top">
         <div>
-          <h1>Hello, {firstName}</h1>
-          <p className="mute">{TODAY.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}. {mine.filter((t) => t.dueOffset <= 1).length} tasks need you in the next 24 hours.</p>
+          <h1>{tt("dash.hello", { name: firstName })}</h1>
+          <p className="mute">{tt("dash.needYou", { date: fmt.date(TODAY, { weekday: "long", day: "numeric", month: "long" }), n: mine.filter((t) => t.dueOffset <= 1).length })}</p>
         </div>
         <div className="pill-row">
           <span className="stack">
@@ -90,7 +93,7 @@ export default function Dashboard() {
           </span>
           {can("VIEW-09") && (
             <button className={`ghost sm ${customizing ? "on" : ""}`} onClick={() => setCustomizing((c) => !c)}>
-              Customize
+              {tt("dash.customize")}
             </button>
           )}
         </div>
@@ -98,10 +101,10 @@ export default function Dashboard() {
 
       {customizing && (
         <div className="card pill-row" style={{ marginBottom: 16 }}>
-          {WIDGETS.map(([id, label]) => (
+          {WIDGETS.map(([id, key]) => (
             <span key={id} className="switch-chip">
-              <Switch label={`Show ${label}`} checked={show(id)} onChange={() => toggle(id)} />
-              {label}
+              <Switch label={tt("dash.show", { widget: tt(key) })} checked={show(id)} onChange={() => toggle(id)} />
+              {tt(key)}
             </span>
           ))}
         </div>
@@ -110,41 +113,35 @@ export default function Dashboard() {
       {show("catch") && !realMode && (
         <div className="card catch">
           <div className="meta" style={{ marginBottom: 8 }}>
-            <h2 style={{ margin: 0 }}>Catch me up</h2>
-            <span className="mute">Since yesterday, 6:40 pm</span>
+            <h2 style={{ margin: 0 }}>{tt("dash.wCatch")}</h2>
+            <span className="mute">{tt("dash.since")}</span>
           </div>
           <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-            <span className="chip">4 tasks moved</span>
-            <span className="chip">3 comments</span>
-            <span className="chip">1 new blocker</span>
-            <span className="chip">1 overdue</span>
+            <span className="chip">{tt("dash.chipMoved")}</span>
+            <span className="chip">{tt("dash.chipComments")}</span>
+            <span className="chip">{tt("dash.chipBlocker")}</span>
+            <span className="chip">{tt("dash.chipOverdue")}</span>
           </div>
           <button className="ln" onClick={() => openDrawer("t1")}>
             <span>💬</span>
-            <span>
-              <b>Ayesha</b> asked for a bigger headline on Design hero section. Your reply is still pending.
-            </span>
+            <span>{rich("dash.catch1")}</span>
           </button>
           <button className="ln" onClick={() => openDrawer("t10")}>
             <span>🔒</span>
-            <span>
-              <b>Fix login crash on Android</b> is now blocking Biometric prompt QA. Bilal is on it, due tomorrow.
-            </span>
+            <span>{rich("dash.catch2")}</span>
           </button>
           <button className="ln" onClick={() => openDrawer("t15")}>
             <span>⏰</span>
-            <span>
-              <b>Rollout plan</b> slipped 2 days past its due date and is dragging Q4 launch health down.
-            </span>
+            <span>{rich("dash.catch3")}</span>
           </button>
         </div>
       )}
 
       {show("pulse") && (
         <>
-          <h2>Project pulse</h2>
+          <h2>{tt("dash.wPulse")}</h2>
           <div className="grid g3" style={{ marginBottom: 18 }}>
-            {Object.keys(projects).length === 0 && <EmptyState title="No projects yet" message="Projects you create or join show their health here." />}
+            {Object.keys(projects).length === 0 && <EmptyState title={tt("dash.noProjects")} message={tt("dash.noProjectsMsg")} />}
             {(Object.keys(projects) as ProjectId[]).map((k) => {
               const h = health(k, tasks);
               return (
@@ -160,13 +157,13 @@ export default function Dashboard() {
                       {h.score}
                     </span>
                     <span className="mute">
-                      {h.overdue} overdue, {h.blocked} blocked
+                      {tt("dash.pulseLine1", { overdue: h.overdue, blocked: h.blocked })}
                       <br />
-                      {h.done} of {h.total} done
+                      {tt("dash.pulseLine2", { done: h.done, total: h.total })}
                     </span>
                   </div>
                   <Ecg score={h.score} color={h.color} critical={h.critical} />
-                  <HealthBreakdown health={h} prefix={`Why ${h.score}?`} />
+                  <HealthBreakdown health={h} prefix={tt("dash.why", { score: h.score })} />
                 </button>
               );
             })}
@@ -178,20 +175,20 @@ export default function Dashboard() {
         {show("burndown") && (
           <div className="card">
             <div className="meta">
-              <h2>Sprint burndown</h2>
-              <span className="mute">{sprintEnd} days left</span>
+              <h2>{tt("dash.sprintBurndown")}</h2>
+              <span className="mute">{tt("dash.daysLeft", { n: sprintEnd })}</span>
             </div>
             <LineChart series={burn} labels={labels} height={150} />
             <Legend series={burn} />
             <p className="mute" style={{ marginTop: 6 }}>
-              {ahead >= 0 ? `You are ${ahead} task${ahead === 1 ? "" : "s"} ahead of the ideal line.` : `You are ${-ahead} task${ahead === -1 ? "" : "s"} behind the ideal line.`}
+              {ahead >= 0 ? tt("dash.ahead", { n: ahead }) : tt("dash.behind", { n: -ahead })}
             </p>
           </div>
         )}
         {show("next") && (
           <div className="card">
-            <h2>Up next for you</h2>
-            {mine.length === 0 && <EmptyState title="Nothing assigned to you" message="Tasks assigned to you will appear here." />}
+            <h2>{tt("dash.upNext")}</h2>
+            {mine.length === 0 && <EmptyState title={tt("dash.nothingAssigned")} message={tt("dash.nothingAssignedMsg")} />}
             {mine.slice(0, 5).map((t) => (
               <button className="row" key={t.id} onClick={() => openDrawer(t.id)}>
                 <span>
@@ -206,7 +203,7 @@ export default function Dashboard() {
         )}
         {show("actions") && can("AI-19") && (
           <div className="card">
-            <h2>Next best actions</h2>
+            <h2>{tt("dash.wActions")}</h2>
             {nextActions(tasks).map((a) => (
               <button key={a.taskId} className="row" onClick={() => openDrawer(a.taskId)}>
                 <span>{a.text}</span>
@@ -219,7 +216,7 @@ export default function Dashboard() {
         )}
         {show("reminders") && can("NOTIF-04") && (
           <div className="card">
-            <h2>Smart reminders</h2>
+            <h2>{tt("dash.wReminders")}</h2>
             {reminders.length ? (
               reminders.map(({ t, context }) => (
                 <button key={t.id} className="row" onClick={() => openDrawer(t.id)}>
@@ -233,7 +230,7 @@ export default function Dashboard() {
                 </button>
               ))
             ) : (
-              <p className="mute">Nothing due in the next day.</p>
+              <p className="mute">{tt("dash.nothingDue")}</p>
             )}
           </div>
         )}

@@ -6,6 +6,7 @@ import { autoPriority, findDuplicates, smartMatch } from "@/lib/ai";
 import { MemberId, Priority, Status } from "@/types";
 import Modal from "./Modal";
 import Dropdown from "./Dropdown";
+import { useT } from "@/i18n/I18nProvider";
 
 function defaultDueDate() {
   const d = new Date(TODAY);
@@ -14,7 +15,8 @@ function defaultDueDate() {
 }
 
 export default function NewTaskModal() {
-  const { newTaskDefaults, closeNewTaskModal, createTask, addAttachments, toast, members, getColumns, tasks, history, capacity, can, openDrawer, projects } = useStore();
+  const { newTaskDefaults, closeNewTaskModal, createTask, addAttachments, toast, members, getColumns, columnLabel, tasks, history, capacity, can, openDrawer, projects } = useStore();
+  const { t: tt } = useT();
   const [title, setTitle] = useState("");
   const [priority, setPriority] = useState<Priority>("m");
   const [assignee, setAssignee] = useState<MemberId>("me");
@@ -53,33 +55,32 @@ export default function NewTaskModal() {
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    if (!clean) return toast("Enter a task title first");
-    const description = bug ? `Steps to reproduce:\n${steps || "-"}\n\nExpected:\n${expected || "-"}\n\nActual:\n${actual || "-"}` : "";
+    if (!clean) return toast(tt("newTask.enterTitle"));
+    const description = bug ? tt("newTask.bugTemplate", { steps: steps || "-", expected: expected || "-", actual: actual || "-" }) : "";
     const id = createTask({ projectId, status, title: clean, priority, assignee, dueOffset: offsetForDate(due), labels: bug ? ["Bug"] : ["New"], description, module: ap?.module });
     if (shots.length) addAttachments(id, shots);
-    const label = getColumns(projectId).find((c) => c[0] === status)?.[1] ?? status;
-    toast("Task added to " + label);
+    toast(tt("newTask.addedTo", { column: columnLabel(projectId, status) }));
     closeNewTaskModal();
   }
 
   return (
-    <Modal title={bug ? `Report a bug · ${projects[projectId]?.name}` : `New task · ${projects[projectId]?.name}`} onClose={closeNewTaskModal}>
+    <Modal title={bug ? tt("newTask.titleBug", { project: projects[projectId]?.name ?? "" }) : tt("newTask.titleTask", { project: projects[projectId]?.name ?? "" })} onClose={closeNewTaskModal}>
       <form onSubmit={submit} style={{ display: "grid", gap: 14 }}>
         <div className="tabs" style={{ justifySelf: "start" }}>
           <button type="button" className={!bug ? "on" : ""} onClick={() => setBug(false)}>
-            Task
+            {tt("newTask.tabTask")}
           </button>
           <button type="button" className={bug ? "on" : ""} onClick={() => setBug(true)}>
-            🐞 Bug report
+            {tt("newTask.tabBug")}
           </button>
         </div>
         <label>
-          Title
-          <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={bug ? "What's broken?" : "What needs to be done?"} />
+          {tt("newTask.title")}
+          <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={bug ? tt("newTask.bugPlaceholder") : tt("newTask.taskPlaceholder")} />
         </label>
         {dups.length > 0 && (
-          <div className="warn" style={{ textAlign: "left" }}>
-            Possible duplicate:{" "}
+          <div className="warn" style={{ textAlign: "start" }}>
+            {tt("newTask.possibleDup")}{" "}
             <button
               type="button"
               className="link"
@@ -90,49 +91,49 @@ export default function NewTaskModal() {
             >
               {dups[0].task.title}
             </button>{" "}
-            ({Math.round(dups[0].score * 100)}% similar)
+            {tt("newTask.similar", { pct: Math.round(dups[0].score * 100) })}
           </div>
         )}
         {bug && (
           <>
             <label>
-              Steps to reproduce
-              <textarea rows={3} value={steps} onChange={(e) => setSteps(e.target.value)} placeholder={"1. Open …\n2. Tap …"} />
+              {tt("newTask.steps")}
+              <textarea rows={3} value={steps} onChange={(e) => setSteps(e.target.value)} placeholder={tt("newTask.stepsPlaceholder")} />
             </label>
             <div className="f2">
               <label>
-                Expected
+                {tt("newTask.expected")}
                 <input value={expected} onChange={(e) => setExpected(e.target.value)} />
               </label>
               <label>
-                Actual
+                {tt("newTask.actual")}
                 <input value={actual} onChange={(e) => setActual(e.target.value)} />
               </label>
             </div>
             <label>
-              Screenshots
+              {tt("newTask.screenshots")}
               <input type="file" accept="image/*" multiple capture="environment" onChange={(e) => setShots(Array.from(e.target.files ?? []))} />
             </label>
             <p className="mute" style={{ fontSize: 12 }}>
-              Structured bug report. Reading the screenshot automatically needs a vision AI model (paid API), which isn&apos;t connected.
+              {tt("newTask.visionNote")}
             </p>
           </>
         )}
         <div className="f2">
           <label>
-            Status
-            <Dropdown value={status} onChange={setStatus} options={getColumns(projectId).map(([s, label]) => ({ value: s, label }))} />
+            {tt("common.status")}
+            <Dropdown value={status} onChange={setStatus} options={getColumns(projectId).map(([s]) => ({ value: s, label: columnLabel(projectId, s) }))} />
           </label>
           <label>
-            Priority
+            {tt("common.priority")}
             <Dropdown value={priority} onChange={setPriority} options={(Object.keys(PRIORITY_LABEL) as Priority[]).map((k) => ({ value: k, label: PRIORITY_LABEL[k] }))} />
           </label>
           <label>
-            Assignee
+            {tt("common.assignee")}
             <Dropdown value={assignee} onChange={setAssignee} options={(Object.keys(members) as MemberId[]).map((k) => ({ value: k, label: members[k].name }))} />
           </label>
           <label>
-            Due date
+            {tt("common.dueDate")}
             <input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
           </label>
         </div>
@@ -140,17 +141,17 @@ export default function NewTaskModal() {
           <div className="pill-row" style={{ fontSize: 12 }}>
             {ap && ap.priority !== priority && (
               <button type="button" className="chip" onClick={() => setPriority(ap.priority)} title={ap.reasons.join(" · ")}>
-                ✨ Suggest {PRIORITY_LABEL[ap.priority]} priority
+                {tt("newTask.suggestPriority", { priority: PRIORITY_LABEL[ap.priority] })}
               </button>
             )}
             {match && match.member !== assignee && (
               <button type="button" className="chip" onClick={() => setAssignee(match.member)} title={match.reason}>
-                ✨ Assign {members[match.member].name} ({match.reason})
+                {tt("newTask.suggestAssign", { name: members[match.member].name, reason: match.reason })}
               </button>
             )}
           </div>
         )}
-        <button className="btn">{bug ? "Submit bug" : "Create task"}</button>
+        <button className="btn">{bug ? tt("newTask.submitBug") : tt("newTask.create")}</button>
       </form>
     </Modal>
   );

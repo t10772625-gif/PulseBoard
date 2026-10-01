@@ -2,9 +2,10 @@
 import { FormEvent, useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { Member } from "@/types";
-import { ROLE_INFO, assignableRoles } from "@/lib/permissions";
+import { assignableRoles } from "@/lib/permissions";
 import Dropdown from "./Dropdown";
 import Modal from "./Modal";
+import { useT } from "@/i18n/I18nProvider";
 
 export default function InviteModal() {
   const { inviteOpen, closeInviteModal, toast, realMode } = useStore();
@@ -16,6 +17,7 @@ export default function InviteModal() {
 // the admin tells the person to register with this exact email.
 function GrantAccess({ onClose }: { onClose: () => void }) {
   const { addInvite, myRole, workspaceName } = useStore();
+  const { t: tt, rich } = useT();
   const roles = assignableRoles(myRole);
   const [role, setRole] = useState<Member["role"]>("Member");
   const [error, setError] = useState<string | null>(null);
@@ -34,38 +36,35 @@ function GrantAccess({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal title="Add a teammate" onClose={onClose}>
+    <Modal title={tt("invite.addTitle")} onClose={onClose}>
       {done ? (
         <div style={{ display: "grid", gap: 12 }}>
           <p className="approval approved" role="status">
-            Access granted: <b>{done.email}</b> will join <b>{workspaceName}</b> as <b>{done.role}</b>.
+            {rich("invite.granted", { email: done.email, workspace: workspaceName, role: tt(`role.${done.role}`) })}
           </p>
-          <p className="mute">
-            Ask them to open <b>{typeof window !== "undefined" ? window.location.origin : ""}/register</b> and sign up with this exact email and a password of their choice. The
-            access expires in 7 days if unused. No email is sent yet.
-          </p>
+          <p className="mute">{rich("invite.instructions", { url: `${typeof window !== "undefined" ? window.location.origin : ""}/register` })}</p>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="ghost" onClick={() => setDone(null)}>
-              Add another
+              {tt("invite.addAnother")}
             </button>
             <button className="btn" onClick={onClose}>
-              Done
+              {tt("common.done")}
             </button>
           </div>
         </div>
       ) : (
         <form onSubmit={submit} style={{ display: "grid", gap: 12 }}>
-          <p className="mute">Only for people who don&apos;t have a PulseBoard account yet. They join this workspace when they sign up with this email.</p>
+          <p className="mute">{tt("invite.onlyNew")}</p>
           <label>
-            Email
-            <input name="email" type="email" autoComplete="off" maxLength={254} required />
+            {tt("common.email")}
+            <input name="email" dir="ltr" type="email" autoComplete="off" maxLength={254} required />
           </label>
           <label>
-            Role
-            <Dropdown inline style={{ display: "block" }} value={role} onChange={setRole} options={roles.map((r) => ({ value: r, label: r }))} />
+            {tt("common.role")}
+            <Dropdown inline style={{ display: "block" }} value={role} onChange={setRole} options={roles.map((r) => ({ value: r, label: tt(`role.${r}`) }))} />
           </label>
           <p className="mute" style={{ fontSize: 12 }}>
-            {ROLE_INFO[role]}
+            {tt(`roleInfo.${role}`)}
           </p>
           {error && (
             <p className="warn" role="alert">
@@ -73,7 +72,7 @@ function GrantAccess({ onClose }: { onClose: () => void }) {
             </p>
           )}
           <button className="btn" disabled={busy}>
-            {busy ? "Please wait…" : "Grant access"}
+            {busy ? tt("invite.wait") : tt("invite.grant")}
           </button>
         </form>
       )}
@@ -85,24 +84,28 @@ function GrantAccess({ onClose }: { onClose: () => void }) {
 function DemoInvite({ onClose, toast }: { onClose: () => void; toast: (m: string) => void }) {
   const [link] = useState(() => `https://pulseboard.app/invite/${Math.random().toString(36).slice(2, 10)}`);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { t: tt } = useT();
 
   async function copyLink() {
     try {
       await navigator.clipboard.writeText(link);
-      toast("Invite link copied");
+      toast(tt("invite.linkCopied"));
     } catch {
       inputRef.current?.select();
-      toast("Press Ctrl+C to copy");
+      toast(tt("invite.pressCopy"));
     }
   }
 
   return (
-    <Modal title="Invite a teammate" onClose={onClose}>
-      <p className="mute">Anyone with this link can join your workspace. Share it over chat or email.</p>
+    <Modal title={tt("invite.inviteTitle")} onClose={onClose}>
+      <p className="mute">{tt("invite.demoNote")}</p>
+      <p className="mute" style={{ fontSize: 12 }}>
+        {tt("invite.demoLabel")}
+      </p>
       <div className="invite-link">
-        <input ref={inputRef} readOnly value={link} onFocus={(e) => e.target.select()} />
+        <input ref={inputRef} readOnly dir="ltr" value={link} onFocus={(e) => e.target.select()} />
         <button className="btn" onClick={copyLink}>
-          Copy link
+          {tt("invite.copyLink")}
         </button>
       </div>
     </Modal>

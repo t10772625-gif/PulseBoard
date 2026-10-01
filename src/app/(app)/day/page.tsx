@@ -1,14 +1,16 @@
 "use client";
 import { DragEvent, useState } from "react";
 import { useStore } from "@/lib/store";
-import { taskModule } from "@/lib/ai";
+import { moduleName, taskModule } from "@/lib/ai";
 import { DueLabel } from "@/components/ui";
 import Gate from "@/components/Gate";
+import { useT } from "@/i18n/I18nProvider";
 
 const HOURS = [9, 10, 11, 12, 13, 14, 15, 16, 17];
 
 export default function MyDay() {
   const { tasks, daySchedule, scheduleTask, unscheduleTask, timerSeconds, timerRunning, toggleTimer, openDrawer } = useStore();
+  const { t: tt, fmt } = useT();
 
   const scheduledIds = new Set(Object.values(daySchedule));
   const mine = tasks.filter((t) => t.assignee === "me" && t.status !== "done" && !scheduledIds.has(t.id));
@@ -33,23 +35,23 @@ export default function MyDay() {
     <>
       <div className="top">
         <div>
-          <h1>My Day</h1>
-          <p className="mute">Drag tasks into time blocks. Plan only what you can really finish.</p>
+          <h1>{tt("day.title")}</h1>
+          <p className="mute">{tt("day.hint")}</p>
         </div>
-        <span className="chip">{plannedHours}h planned of 6h focus time</span>
+        <span className="chip">{tt("day.planned", { n: plannedHours })}</span>
       </div>
       <div className="day">
         <div className="grid" style={{ alignContent: "start" }}>
           <div className="card">
-            <h2>Focus timer</h2>
-            <div className="timer">
+            <h2>{tt("day.timer")}</h2>
+            <div className="timer" dir="ltr">
               {mm}:{ss}
             </div>
             <p className="mute" style={{ margin: "6px 0 12px" }}>
-              {current ? current.title : "Pick a task first"}
+              {current ? current.title : tt("day.pickTask")}
             </p>
             <button className="btn" onClick={toggleTimer}>
-              {timerRunning ? "Pause" : "Start focus"}
+              {timerRunning ? tt("day.pause") : tt("day.startFocus")}
             </button>
           </div>
           <div
@@ -62,7 +64,7 @@ export default function MyDay() {
               if (hour !== undefined) unscheduleTask(Number(hour));
             }}
           >
-            <h2>Up next</h2>
+            <h2>{tt("day.upNext")}</h2>
             {mine.length ? (
               mine.map((t) => (
                 <div
@@ -79,7 +81,7 @@ export default function MyDay() {
                 </div>
               ))
             ) : (
-              <p className="mute">Everything is scheduled.</p>
+              <p className="mute">{tt("day.allScheduled")}</p>
             )}
           </div>
         </div>
@@ -89,7 +91,7 @@ export default function MyDay() {
             const task = taskId ? tasks.find((t) => t.id === taskId) : undefined;
             return (
               <div className="slot" key={h}>
-                <span className="mute">{h}:00</span>
+                <span className="mute">{fmt.time(new Date(2026, 0, 1, h), { hour: "numeric", minute: "2-digit" })}</span>
                 <div
                   className="z"
                   onDragOver={(e) => {
@@ -107,7 +109,7 @@ export default function MyDay() {
                   {task && (
                     <div className="sch" draggable onDragStart={(e) => onDragStart(e, task.id)} onDragEnd={onDragEnd}>
                       <span onClick={() => openDrawer(task.id)}>{task.title}</span>
-                      <button aria-label="Remove" onClick={() => unscheduleTask(h)}>
+                      <button aria-label={tt("day.remove")} onClick={() => unscheduleTask(h)}>
                         ✕
                       </button>
                     </div>
@@ -127,6 +129,7 @@ export default function MyDay() {
 // and the personal context-switch count (TIME-08).
 function DayExtras() {
   const { tasks, daySchedule, scheduleTask, openDrawer, taskSwitches, standups, postStandup, members, toast, can } = useStore();
+  const { t: tt } = useT();
   const [y, setY] = useState(standups.me?.yesterday ?? "");
   const [td, setTd] = useState(standups.me?.today ?? "");
   const [bl, setBl] = useState(standups.me?.blockers ?? "");
@@ -146,28 +149,28 @@ function DayExtras() {
     const queue = mine.filter((t) => !scheduled.has(t.id)).sort((a, b) => rank(a) - rank(b));
     // Morning slots get high-energy work, afternoons get the rest
     free.forEach((h, i) => queue[i] && scheduleTask(h, queue[i].id));
-    toast(queue.length ? "Day planned: high-energy work in the morning" : "Nothing left to schedule");
+    toast(queue.length ? tt("day.planned2") : tt("day.nothingLeft"));
   }
 
   return (
     <div className="grid g2" style={{ marginTop: 18 }}>
       <div className="card">
-        <h2>Plan by energy</h2>
+        <h2>{tt("day.energyTitle")}</h2>
         <Gate id="TIME-07">
           <p className="mute" style={{ fontSize: 13, marginBottom: 8 }}>
-            Mark tasks ⚡ high or 🌙 low energy in the task drawer, then fill your free hours: hard work while you&apos;re fresh, light work later.
+            {tt("day.energyHint")}
           </p>
           <button className="btn sm" onClick={planByEnergy}>
-            Auto-fill my day
+            {tt("day.autoFill")}
           </button>
         </Gate>
       </div>
       <div className="card">
-        <h2>Batch similar work</h2>
+        <h2>{tt("day.batchTitle")}</h2>
         <Gate id="TIME-06">
           {batches.map(([m, list]) => (
             <div key={m} style={{ marginBottom: 8 }}>
-              <b>{m}</b> <span className="mute">({list.length})</span>
+              <b>{moduleName(m)}</b> <span className="mute">({list.length})</span>
               <p style={{ fontSize: 13 }}>
                 {list.map((t, i) => (
                   <span key={t.id}>
@@ -180,25 +183,25 @@ function DayExtras() {
               </p>
             </div>
           ))}
-          <p className="mute" style={{ fontSize: 12 }}>Doing a batch back-to-back means fewer context switches.</p>
+          <p className="mute" style={{ fontSize: 12 }}>{tt("day.batchHint")}</p>
         </Gate>
       </div>
       <div className="card">
-        <h2>Async standup</h2>
+        <h2>{tt("day.standupTitle")}</h2>
         <Gate id="SPEC-24">
           <div style={{ display: "grid", gap: 8 }}>
-            <input placeholder="Yesterday I…" value={y} onChange={(e) => setY(e.target.value)} />
-            <input placeholder="Today I will…" value={td} onChange={(e) => setTd(e.target.value)} />
-            <input placeholder="Blockers (optional)" value={bl} onChange={(e) => setBl(e.target.value)} />
+            <input placeholder={tt("day.yesterday")} value={y} onChange={(e) => setY(e.target.value)} />
+            <input placeholder={tt("day.today")} value={td} onChange={(e) => setTd(e.target.value)} />
+            <input placeholder={tt("day.blockers")} value={bl} onChange={(e) => setBl(e.target.value)} />
             <button
               className="btn sm"
               onClick={() => {
-                if (!td.trim()) return toast("Add what you'll do today");
+                if (!td.trim()) return toast(tt("day.addToday"));
                 postStandup({ yesterday: y, today: td, blockers: bl });
-                toast("Standup posted — no meeting needed");
+                toast(tt("day.posted"));
               }}
             >
-              Post update
+              {tt("day.post")}
             </button>
           </div>
           <div className="ai-out">
@@ -215,18 +218,18 @@ function DayExtras() {
         </Gate>
       </div>
       <div className="card">
-        <h2>Focus today</h2>
+        <h2>{tt("day.focusToday")}</h2>
         {can("TIME-08") ? (
           <>
             <div className="stat">{taskSwitches}</div>
             <p className="mute" style={{ fontSize: 13 }}>
-              task switches this session. Only you can see this. {taskSwitches > 10 ? "Try batching similar work." : "Nice and focused."}
+              {tt("day.switches", { tip: taskSwitches > 10 ? tt("day.tryBatch") : tt("day.focused") })}
             </p>
           </>
         ) : (
           <Gate id="TIME-08">{null}</Gate>
         )}
-        <p className="mute" style={{ fontSize: 12, marginTop: 8 }}>Starting the focus timer mutes notifications until it ends.</p>
+        <p className="mute" style={{ fontSize: 12, marginTop: 8 }}>{tt("day.timerMutes")}</p>
       </div>
     </div>
   );

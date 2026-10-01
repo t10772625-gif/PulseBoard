@@ -1,3 +1,4 @@
+import { activeFormatters, tr } from "@/i18n";
 import {
   ActivityEvent,
   AutomationRule,
@@ -44,9 +45,34 @@ export const COLUMNS: [Status, string, number][] = [
   ["done", "Done", 0],
 ];
 
-export const STATUS_LABEL: Record<Status, string> = Object.fromEntries(COLUMNS.map((c) => [c[0], c[1]])) as Record<Status, string>;
+// Labels read the language on screen each time they're used (getters), so every
+// existing STATUS_LABEL[s] / PRIORITY_LABEL[p] call site is translated as-is.
+export const STATUS_LABEL: Record<Status, string> = {
+  get todo() {
+    return tr("status.todo");
+  },
+  get prog() {
+    return tr("status.prog");
+  },
+  get rev() {
+    return tr("status.rev");
+  },
+  get done() {
+    return tr("status.done");
+  },
+};
 
-export const PRIORITY_LABEL: Record<Priority, string> = { h: "high", m: "medium", l: "low" };
+export const PRIORITY_LABEL: Record<Priority, string> = {
+  get h() {
+    return tr("priority.h");
+  },
+  get m() {
+    return tr("priority.m");
+  },
+  get l() {
+    return tr("priority.l");
+  },
+};
 
 export const INITIAL_TASKS: Task[] = [
   { id: "t1", title: "Design hero section", projectId: "p1", status: "prog", priority: "h", assignee: "me", dueOffset: 5, barStart: -2, lengthDays: 7, labels: ["Design"], subtasks: [["Wireframes", 1], ["Desktop layout", 1], ["Mobile layout", 0], ["Review with team", 0]], description: "Create desktop and mobile layouts for the hero. Include a headline, short text and one main button.", trackedSeconds: 12000, createdDaysAgo: 4 },
@@ -103,10 +129,12 @@ export const TODAY = (() => {
   return d;
 })();
 
+// Short date in the language on screen (e.g. "3 Oct" / "3 اکتوبر"). Display only:
+// never parse this string back (offsetForDate takes ISO input values).
 export function dateForOffset(offset: number): string {
   const d = new Date(TODAY);
   d.setDate(d.getDate() + offset);
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return activeFormatters().date(d, { day: "numeric", month: "short" });
 }
 
 export function offsetForDate(dateStr: string): number {

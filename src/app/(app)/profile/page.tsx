@@ -2,27 +2,28 @@
 import { FormEvent, useState } from "react";
 import { useStore } from "@/lib/store";
 import { getSupabase } from "@/lib/supabase/client";
-import { ROLE_INFO } from "@/lib/permissions";
 import { Avatar } from "@/components/ui";
 import { PasswordInput } from "@/components/PasswordInput";
+import { useT } from "@/i18n/I18nProvider";
 
 // Your own account: name, email, role and workspace; change display name and password.
 export default function ProfilePage() {
   const { members, myRole, myEmail: email, workspaceName, realMode, updateMyName, toast } = useStore();
   const me = members.me;
+  const { t, rich } = useT();
 
   return (
     <>
       <div className="top">
         <div>
-          <h1>Profile</h1>
-          <p className="mute">Your account in {workspaceName || "this workspace"}.</p>
+          <h1>{t("profile.title")}</h1>
+          <p className="mute">{t("profile.yourAccount", { workspace: workspaceName || t("profile.thisWorkspace") })}</p>
         </div>
       </div>
 
       {!realMode && (
         <p className="warn" role="status" style={{ marginBottom: 14 }}>
-          Demo mode: profile editing needs the real database.
+          {t("profile.demo")}
         </p>
       )}
 
@@ -31,22 +32,20 @@ export default function ProfilePage() {
           <div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 14 }}>
             <Avatar id="me" large />
             <div>
-              <b>{me?.name ?? "You"}</b>
-              <p className="mute">{email || "—"}</p>
+              <b>{me?.name ?? t("common.you")}</b>
+              <p className="mute" dir="ltr">{email || "—"}</p>
             </div>
           </div>
-          <p>
-            <b>Role:</b> {myRole}
-          </p>
+          <p>{rich("profile.role", { role: t(`role.${myRole}`) })}</p>
           <p className="mute" style={{ marginBottom: 14 }}>
-            {ROLE_INFO[myRole]}
+            {t(`roleInfo.${myRole}`)}
           </p>
-          <NameForm key={me?.name} initial={me?.name ?? ""} disabled={!realMode} onSave={updateMyName} onSaved={() => toast("Name updated")} />
+          <NameForm key={me?.name} initial={me?.name ?? ""} disabled={!realMode} onSave={updateMyName} onSaved={() => toast(t("profile.nameUpdated"))} />
         </div>
 
         <div className="card">
-          <h2>Change password</h2>
-          <PasswordForm email={email} disabled={!realMode} onDone={() => toast("Password updated")} />
+          <h2>{t("profile.changePassword")}</h2>
+          <PasswordForm email={email} disabled={!realMode} onDone={() => toast(t("profile.pwUpdated"))} />
         </div>
       </div>
     </>
@@ -56,6 +55,7 @@ export default function ProfilePage() {
 function NameForm({ initial, disabled, onSave, onSaved }: { initial: string; disabled: boolean; onSave: (n: string) => Promise<string | null>; onSaved: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const { t } = useT();
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -70,7 +70,7 @@ function NameForm({ initial, disabled, onSave, onSaved }: { initial: string; dis
   return (
     <form onSubmit={submit} style={{ display: "grid", gap: 10 }}>
       <label>
-        Full name
+        {t("auth.fullName")}
         <input name="name" defaultValue={initial} maxLength={80} autoComplete="name" required disabled={disabled} />
       </label>
       {error && (
@@ -79,7 +79,7 @@ function NameForm({ initial, disabled, onSave, onSaved }: { initial: string; dis
         </p>
       )}
       <button className="btn" disabled={busy || disabled} style={{ justifySelf: "start" }}>
-        {busy ? "Saving…" : "Save name"}
+        {busy ? t("profile.saving") : t("profile.saveName")}
       </button>
     </form>
   );
@@ -90,6 +90,7 @@ function NameForm({ initial, disabled, onSave, onSaved }: { initial: string; dis
 function PasswordForm({ email, disabled, onDone }: { email: string; disabled: boolean; onDone: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const { t } = useT();
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -101,18 +102,18 @@ function PasswordForm({ email, disabled, onDone }: { email: string; disabled: bo
     const current = String(form.get("current") ?? "");
     const next = String(form.get("next") ?? "");
     const confirm = String(form.get("confirm") ?? "");
-    if (next.length < 8) return setError("New password must be at least 8 characters.");
-    if (next !== confirm) return setError("New passwords don't match.");
-    if (next === current) return setError("Choose a different password from your current one.");
+    if (next.length < 8) return setError(t("profile.newShort"));
+    if (next !== confirm) return setError(t("profile.mismatch"));
+    if (next === current) return setError(t("profile.same"));
     setBusy(true);
     const check = await sb.auth.signInWithPassword({ email, password: current });
     if (check.error) {
       setBusy(false);
-      return setError(check.error.status === 429 ? "Too many attempts. Please wait and try again." : "Current password is incorrect.");
+      return setError(check.error.status === 429 ? t("profile.tooMany") : t("profile.wrongCurrent"));
     }
     const { error: updateError } = await sb.auth.updateUser({ password: next });
     setBusy(false);
-    if (updateError) return setError("Could not update your password. Please try again.");
+    if (updateError) return setError(t("profile.updateFailed"));
     formEl.reset();
     onDone();
   }
@@ -120,15 +121,15 @@ function PasswordForm({ email, disabled, onDone }: { email: string; disabled: bo
   return (
     <form onSubmit={submit} style={{ display: "grid", gap: 10 }}>
       <label>
-        Current password
+        {t("profile.current")}
         <PasswordInput name="current" autoComplete="current-password" required disabled={disabled} />
       </label>
       <label>
-        New password
+        {t("profile.new")}
         <PasswordInput name="next" autoComplete="new-password" minLength={8} required disabled={disabled} />
       </label>
       <label>
-        Confirm new password
+        {t("profile.confirm")}
         <PasswordInput name="confirm" autoComplete="new-password" minLength={8} required disabled={disabled} />
       </label>
       {error && (
@@ -137,7 +138,7 @@ function PasswordForm({ email, disabled, onDone }: { email: string; disabled: bo
         </p>
       )}
       <button className="btn" disabled={busy || disabled} style={{ justifySelf: "start" }}>
-        {busy ? "Please wait…" : "Update password"}
+        {busy ? t("auth.wait") : t("profile.update")}
       </button>
     </form>
   );

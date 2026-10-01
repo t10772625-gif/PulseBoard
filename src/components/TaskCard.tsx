@@ -4,9 +4,11 @@ import { Trash2 } from "lucide-react";
 import { useStore, isBlocked } from "@/lib/store";
 import { Task } from "@/types";
 import { Avatar, DueLabel } from "./ui";
+import { useT } from "@/i18n/I18nProvider";
 
 export default function TaskCard({ task }: { task: Task }) {
   const { tasks, openDrawer, deleteTask, selectedIds, toggleSelect, canEdit, allowed } = useStore();
+  const { t: tt } = useT();
   const blocked = isBlocked(task, tasks);
   const doneSubs = task.subtasks.filter((s) => s[1]).length;
   const subtaskIcon = doneSubs === 0 ? "☐" : doneSubs === task.subtasks.length ? "☑" : "◐";
@@ -36,7 +38,7 @@ export default function TaskCard({ task }: { task: Task }) {
             <input
               type="checkbox"
               className="task-check"
-              aria-label={`Select ${task.title}`}
+              aria-label={tt("card.select", { title: task.title })}
               checked={selected}
               onClick={(e) => e.stopPropagation()}
               onChange={() => toggleSelect(task.id)}
@@ -49,8 +51,8 @@ export default function TaskCard({ task }: { task: Task }) {
         {allowed("task.delete") && (
           <button
             className="task-delete"
-            aria-label={`Delete ${task.title}`}
-            title="Delete task (undo available)"
+            aria-label={tt("card.delete", { title: task.title })}
+            title={tt("card.deleteTitle")}
             onClick={(e) => {
               e.stopPropagation();
               deleteTask(task.id);
@@ -75,22 +77,22 @@ export default function TaskCard({ task }: { task: Task }) {
             </span>
           )}
           {checklist.length > 0 && (
-            <span className="due" title="Checklist">
+            <span className="due" title={tt("card.checklist")}>
               ✔ {checklist.filter((c) => c[1]).length}/{checklist.length}
             </span>
           )}
           {task.recurrence && task.recurrence !== "none" && (
-            <span className="due" title={`Repeats ${task.recurrence}`}>
+            <span className="due" title={tt("card.repeats", { when: tt(`drawer.${task.recurrence}`) })}>
               🔁
             </span>
           )}
           {task.energy && (
-            <span className="due" title={`${task.energy} energy`}>
+            <span className="due" title={task.energy === "high" ? tt("card.energyHigh") : tt("card.energyLow")}>
               {task.energy === "high" ? "⚡" : "🌙"}
             </span>
           )}
-          {task.approval === "requested" && <span className="due" title="Waiting for client approval">⏳ Approval</span>}
-          {blocked && <span className="lock"> 🔒 Blocked</span>}
+          {task.approval === "requested" && <span className="due" title={tt("card.waitingApproval")}>{tt("card.approval")}</span>}
+          {blocked && <span className="lock"> {tt("card.blocked")}</span>}
         </span>
         <Avatar id={task.assignee} />
       </div>

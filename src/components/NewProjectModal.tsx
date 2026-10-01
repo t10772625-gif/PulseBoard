@@ -5,10 +5,12 @@ import { useStore } from "@/lib/store";
 import { PROJECT_COLOR_PRESETS } from "@/lib/mock-data";
 import { PLANS } from "@/lib/plans";
 import Modal from "./Modal";
+import { useT } from "@/i18n/I18nProvider";
 
 export default function NewProjectModal() {
   const { newProjectOpen, closeNewProjectModal, addProject, toast, projects, plan } = useStore();
   const router = useRouter();
+  const { t: tt } = useT();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [preset, setPreset] = useState(0);
@@ -18,12 +20,12 @@ export default function NewProjectModal() {
   function submit(e: FormEvent) {
     e.preventDefault();
     const v = name.trim();
-    if (!v) return toast("Enter a project name first");
+    if (!v) return toast(tt("newProject.enterName"));
     // Plan limit: Free allows 1 project
-    if (Object.keys(projects).length >= PLANS[plan].boards) return toast(`The ${PLANS[plan].name} plan allows ${PLANS[plan].boards} project. Upgrade to Pro for unlimited projects.`);
+    if (Object.keys(projects).length >= PLANS[plan].boards) return toast(tt("newProject.limit", { plan: tt(`plan.${plan}`), n: PLANS[plan].boards }));
     const { color, gradient } = PROJECT_COLOR_PRESETS[preset];
     const id = addProject(v, description.trim(), color, gradient);
-    toast("Project created");
+    toast(tt("newProject.created"));
     setName("");
     setDescription("");
     closeNewProjectModal();
@@ -31,18 +33,18 @@ export default function NewProjectModal() {
   }
 
   return (
-    <Modal title="New project" onClose={closeNewProjectModal}>
+    <Modal title={tt("newProject.title")} onClose={closeNewProjectModal}>
       <form onSubmit={submit} style={{ display: "grid", gap: 14 }}>
         <label>
-          Project name
-          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Marketing site" />
+          {tt("newProject.name")}
+          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={tt("newProject.namePlaceholder")} />
         </label>
         <label>
-          Description
-          <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What is this project about?" />
+          {tt("newProject.description")}
+          <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder={tt("newProject.descPlaceholder")} />
         </label>
         <label>
-          Color
+          {tt("newProject.color")}
           <div className="swatches">
             {PROJECT_COLOR_PRESETS.map((p, i) => (
               <button
@@ -50,13 +52,13 @@ export default function NewProjectModal() {
                 key={i}
                 className={`swatch ${i === preset ? "sel" : ""}`}
                 style={{ background: `linear-gradient(135deg, ${p.color}, ${p.gradient})` }}
-                aria-label={`Color option ${i + 1}`}
+                aria-label={tt("newProject.colorOption", { n: i + 1 })}
                 onClick={() => setPreset(i)}
               />
             ))}
           </div>
         </label>
-        <button className="btn">Create project</button>
+        <button className="btn">{tt("newProject.create")}</button>
       </form>
     </Modal>
   );

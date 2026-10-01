@@ -1,0 +1,7 @@
+{
+  "_comment": "Language registry. To add a language: put its translations in public/locales/<code>.json (same keys as src/i18n/messages/en.json) and add an entry here. It stays hidden until enabled is true; set qa to approved only after a native-speaker review.",
+  "locales": [
+    { "code": "en", "name": "English", "nativeName": "English", "intl": "en-US", "dir": "ltr", "enabled": true, "qa": "approved" },
+    { "code": "ur", "name": "Urdu", "nativeName": "اردو", "intl": "ur-PK", "dir": "rtl", "enabled": true, "qa": "in-review" }
+  ]
+}

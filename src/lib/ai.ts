@@ -3,6 +3,10 @@
 // v0 described in docs/product/feature-audit.md; a model can replace it later.
 import { HistoryItem, Member, MemberId, Priority, Task } from "@/types";
 import { MODULE_CRITICALITY, MODULE_KEYWORDS } from "./mock-data";
+import { tr, trList, trOr } from "@/i18n";
+
+// Display name of a module in the language on screen (module ids stay English)
+export const moduleName = (mod: string) => trOr(`module.${mod}`, mod);
 
 const STOP = new Set(
   "a an the to of for on in at and or is are be with from by this that it as into not no yes our your my we you i ka ki ke ko hai hain se me mein par aur".split(" ")
@@ -69,11 +73,11 @@ export function autoPriority(input: { title: string; description?: string; label
   const score = criticality * 0.4 + impact * 0.3 + urgency * 0.2 + frequency * 0.1;
   const priority: Priority = score >= 6.5 ? "h" : score >= 4 ? "m" : "l";
   const reasons = [
-    `${mod} module (criticality ${criticality}/10)`,
-    impactHits.length ? `impact words: ${impactHits.join(", ")}` : "no impact words found",
-    due < 0 ? `${-due}d overdue` : `due in ${due}d`,
+    tr("ai.reasonModule", { module: moduleName(mod), n: criticality }),
+    impactHits.length ? tr("ai.reasonImpact", { words: impactHits.join(", ") }) : tr("ai.reasonNoImpact"),
+    due < 0 ? tr("ai.reasonOverdue", { n: -due }) : tr("ai.reasonDueIn", { n: due }),
   ];
-  if (input.reports) reasons.push(`${input.reports} similar reports`);
+  if (input.reports) reasons.push(tr("ai.reasonReports", { n: input.reports }));
   return { priority, score: Math.round(score * 10) / 10, module: mod, reasons };
 }
 
@@ -118,7 +122,7 @@ export function smartMatch(
       const cap = capacity[m] ?? 5;
       const availability = Math.max(0, 1 - open / cap);
       const score = (expertise / maxExp) * 0.6 + availability * 0.4;
-      const reason = `${expertise} ${mod} task${expertise === 1 ? "" : "s"} done · ${open}/${cap} open`;
+      const reason = tr("ai.matchReason", { n: expertise, module: moduleName(mod), open, cap });
       return { member: m, score: Math.round(score * 100) / 100, expertise, open, capacity: cap, reason };
     })
     .sort((a, b) => b.score - a.score);
@@ -146,7 +150,7 @@ export function workloadReport(tasks: Task[], members: Record<MemberId, Member>,
         (x) => x.member !== r.member && load[x.member] < (capacity[x.member] ?? 5)
       );
       if (!match) break;
-      suggestions.push({ taskId: t.id, from: r.member, to: match.member, reason: `${members[r.member].name} is at ${load[r.member]}/${r.capacity}; ${match.reason}` });
+      suggestions.push({ taskId: t.id, from: r.member, to: match.member, reason: tr("ai.rebalanceReason", { name: members[r.member].name, load: load[r.member], cap: r.capacity, reason: match.reason }) });
       load[r.member]--;
       load[match.member]++;
     }
@@ -164,29 +168,29 @@ export function parseQuery(q: string, members: Record<MemberId, Member>, me: Mem
     preds.push(p);
   };
   if (!s) return { match: () => true, explain };
-  if (/\b(mine|my|me|mere|meri)\b|assignee\s*=\s*me/.test(s)) add("assignee = me", (t) => t.assignee === me);
+  if (/\b(mine|my|me|mere|meri)\b|assignee\s*=\s*me/.test(s)) add(tr("ai.qAssigneeMe"), (t) => t.assignee === me);
   for (const m of Object.values(members)) {
     const first = m.name.split(" ")[0].toLowerCase();
-    if (m.id !== me && new RegExp(`\\b${first}\\b`).test(s)) add(`assignee = ${m.name}`, (t) => t.assignee === m.id);
+    if (m.id !== me && new RegExp(`\\b${first}\\b`).test(s)) add(tr("ai.qAssignee", { name: m.name }), (t) => t.assignee === m.id);
   }
-  if (/\b(high|urgent|p0|p1|critical)\b|priority\s*=\s*(high|h)/.test(s)) add("priority = high", (t) => t.priority === "h");
-  else if (/\b(medium|p2)\b|priority\s*=\s*(medium|m)/.test(s)) add("priority = medium", (t) => t.priority === "m");
-  else if (/\b(low|p3)\b|priority\s*=\s*(low|l)/.test(s)) add("priority = low", (t) => t.priority === "l");
-  if (/\b(overdue|late)\b/.test(s)) add("overdue", (t) => t.status !== "done" && t.dueOffset < 0);
-  if (/\btoday\b/.test(s)) add("due today", (t) => t.dueOffset === 0);
-  if (/\btomorrow\b/.test(s)) add("due tomorrow", (t) => t.dueOffset === 1);
-  if (/\byesterday\b/.test(s)) add("due yesterday", (t) => t.dueOffset === -1);
-  if (/\bthis week\b/.test(s)) add("due within 7 days", (t) => t.dueOffset >= 0 && t.dueOffset <= 7);
-  if (/\bblocked\b/.test(s)) add("blocked", (t, all) => !!t.blockedBy && all.find((x) => x.id === t.blockedBy)?.status !== "done");
-  if (/\b(pending|open|not done)\b|status\s*!=\s*done/.test(s)) add("status ≠ done", (t) => t.status !== "done");
-  else if (/\bdone\b|status\s*=\s*done/.test(s)) add("status = done", (t) => t.status === "done");
-  if (/\bin progress\b/.test(s)) add("status = in progress", (t) => t.status === "prog");
+  if (/\b(high|urgent|p0|p1|critical)\b|priority\s*=\s*(high|h)/.test(s)) add(tr("ai.qPriority", { p: tr("priority.h") }), (t) => t.priority === "h");
+  else if (/\b(medium|p2)\b|priority\s*=\s*(medium|m)/.test(s)) add(tr("ai.qPriority", { p: tr("priority.m") }), (t) => t.priority === "m");
+  else if (/\b(low|p3)\b|priority\s*=\s*(low|l)/.test(s)) add(tr("ai.qPriority", { p: tr("priority.l") }), (t) => t.priority === "l");
+  if (/\b(overdue|late)\b/.test(s)) add(tr("ai.qOverdue"), (t) => t.status !== "done" && t.dueOffset < 0);
+  if (/\btoday\b/.test(s)) add(tr("ai.qDueToday"), (t) => t.dueOffset === 0);
+  if (/\btomorrow\b/.test(s)) add(tr("ai.qDueTomorrow"), (t) => t.dueOffset === 1);
+  if (/\byesterday\b/.test(s)) add(tr("ai.qDueYesterday"), (t) => t.dueOffset === -1);
+  if (/\bthis week\b/.test(s)) add(tr("ai.qDueWeek"), (t) => t.dueOffset >= 0 && t.dueOffset <= 7);
+  if (/\bblocked\b/.test(s)) add(tr("ai.qBlocked"), (t, all) => !!t.blockedBy && all.find((x) => x.id === t.blockedBy)?.status !== "done");
+  if (/\b(pending|open|not done)\b|status\s*!=\s*done/.test(s)) add(tr("ai.qNotDone"), (t) => t.status !== "done");
+  else if (/\bdone\b|status\s*=\s*done/.test(s)) add(tr("ai.qDone"), (t) => t.status === "done");
+  if (/\bin progress\b/.test(s)) add(tr("ai.qInProgress"), (t) => t.status === "prog");
   const label = s.match(/#(\w+)/);
-  if (label) add(`label = ${label[1]}`, (t) => t.labels.some((l) => l.toLowerCase() === label[1]));
-  if (/\bbugs?\b/.test(s) && !label) add("label = Bug", (t) => t.labels.includes("Bug"));
+  if (label) add(tr("ai.qLabel", { label: label[1] }), (t) => t.labels.some((l) => l.toLowerCase() === label[1]));
+  if (/\bbugs?\b/.test(s) && !label) add(tr("ai.qBugs"), (t) => t.labels.includes("Bug"));
   const quoted = s.match(/"([^"]+)"/);
-  if (quoted) add(`text contains "${quoted[1]}"`, (t) => (t.title + t.description).toLowerCase().includes(quoted[1]));
-  if (!preds.length) add(`text contains "${s}"`, (t) => (t.title + " " + t.description + " " + t.labels.join(" ")).toLowerCase().includes(s));
+  if (quoted) add(tr("ai.qText", { text: quoted[1] }), (t) => (t.title + t.description).toLowerCase().includes(quoted[1]));
+  if (!preds.length) add(tr("ai.qText", { text: s }), (t) => (t.title + " " + t.description + " " + t.labels.join(" ")).toLowerCase().includes(s));
   return { match: (t: Task, all: Task[]) => preds.every((p) => p(t, all)), explain };
 }
 
@@ -236,7 +240,7 @@ export function parseTaskText(text: string, members: Record<MemberId, Member>) {
     assignee,
     labels: bug ? ["Bug"] : autoTags(cleanTitle).slice(0, 1).map((t) => t[0].toUpperCase() + t.slice(1)),
     module: ap.module,
-    priorityReason: priority ? "from your words" : `auto: ${ap.reasons[0]}`,
+    priorityReason: priority ? tr("ai.fromWords") : tr("ai.auto", { reason: ap.reasons[0] }),
   };
 }
 
@@ -246,19 +250,19 @@ export function nextActions(tasks: Task[], me: MemberId = "me") {
   const mine = tasks.filter((t) => t.assignee === me && t.status !== "done");
   mine
     .filter((t) => t.dueOffset < 0)
-    .forEach((t) => out.push({ taskId: t.id, text: `Finish "${t.title}"`, why: `${-t.dueOffset}d overdue` }));
+    .forEach((t) => out.push({ taskId: t.id, text: tr("ai.naFinish", { title: t.title }), why: tr("ai.whyOverdue", { n: -t.dueOffset }) }));
   mine
     .filter((t) => t.dueOffset >= 0 && t.dueOffset <= 1)
-    .forEach((t) => out.push({ taskId: t.id, text: `Complete "${t.title}"`, why: t.dueOffset === 0 ? "due today" : "due tomorrow" }));
+    .forEach((t) => out.push({ taskId: t.id, text: tr("ai.naComplete", { title: t.title }), why: t.dueOffset === 0 ? tr("ai.whyToday") : tr("ai.whyTomorrow") }));
   tasks
     .filter((t) => t.blockedBy && tasks.find((b) => b.id === t.blockedBy && b.assignee === me && b.status !== "done"))
     .forEach((t) => {
       const blocker = tasks.find((b) => b.id === t.blockedBy)!;
-      out.push({ taskId: blocker.id, text: `Unblock "${t.title}"`, why: `it waits on your task "${blocker.title}"` });
+      out.push({ taskId: blocker.id, text: tr("ai.naUnblock", { title: t.title }), why: tr("ai.whyWaits", { title: blocker.title }) });
     });
   tasks
     .filter((t) => t.status === "rev" && t.assignee !== me)
-    .forEach((t) => out.push({ taskId: t.id, text: `Review "${t.title}"`, why: "waiting in review" }));
+    .forEach((t) => out.push({ taskId: t.id, text: tr("ai.naReview", { title: t.title }), why: tr("ai.whyReview") }));
   const seen = new Set<string>();
   return out.filter((x) => !seen.has(x.taskId) && seen.add(x.taskId)).slice(0, 5);
 }
@@ -266,11 +270,11 @@ export function nextActions(tasks: Task[], me: MemberId = "me") {
 // ---------- Task splitting (AI-23) ----------
 export function splitTask(title: string): string[] {
   const t = title.toLowerCase();
-  if (/\b(bug|fix|crash|broken|error)\b/.test(t)) return ["Reproduce and write steps", "Find the root cause", "Fix it", "Add a regression test", "Verify on staging"];
-  if (/\b(design|wireframe|layout|hero|ui)\b/.test(t)) return ["Gather references", "Wireframe", "High-fidelity design", "Review with team", "Hand off to dev"];
-  if (/\b(email|copy|blog|press|content|announcement)\b/.test(t)) return ["Outline", "First draft", "Edit", "Legal / brand review", "Publish"];
-  if (/\b(launch|rollout|release)\b/.test(t)) return ["Checklist", "Stakeholder sign-off", "Staged rollout", "Monitor metrics", "Retro"];
-  return ["Plan the approach", "Build", "Write tests", "Code review", "Deploy"];
+  if (/\b(bug|fix|crash|broken|error)\b/.test(t)) return trList("ai.split.bug");
+  if (/\b(design|wireframe|layout|hero|ui)\b/.test(t)) return trList("ai.split.design");
+  if (/\b(email|copy|blog|press|content|announcement)\b/.test(t)) return trList("ai.split.content");
+  if (/\b(launch|rollout|release)\b/.test(t)) return trList("ai.split.launch");
+  return trList("ai.split.default");
 }
 
 // ---------- Test case generator (AI-14) ----------
@@ -278,17 +282,17 @@ export function testCases(title: string): string[] {
   const t = title.toLowerCase();
   const subject = title.replace(/^(fix|build|create|add)\s+/i, "");
   if (/login|auth|password|biometric/.test(t))
-    return ["Login with valid credentials → succeeds", "Login with invalid credentials → shows an error", "Login on a slow network → times out gracefully after 30s", "Login from mobile → works", "Repeated failures → rate limited"];
+    return trList("ai.tests.login");
   if (/payment|checkout|refund/.test(t))
-    return ["Successful payment → order confirmed", "Declined card → clear error, no charge", "Gateway timeout → retry without double charge", "Refund → balance restored"];
-  if (/form/.test(t)) return ["Submit with all fields → success", "Missing required field → inline error", "Invalid email → rejected", "Double submit → only one entry"];
-  return [`${subject}: happy path works`, `${subject}: invalid input is rejected`, `${subject}: works on mobile`, `${subject}: no regression in related screens`];
+    return trList("ai.tests.payment");
+  if (/form/.test(t)) return trList("ai.tests.form");
+  return trList("ai.tests.generic", { subject });
 }
 
 // ---------- Auto-documentation (AI-20) ----------
 export function autoDoc(task: Task, projectName: string, moduleName: string): string {
-  const subs = task.subtasks.map((s) => `- ${s[1] ? "[x]" : "[ ]"} ${s[0]}`).join("\n") || "- (none)";
-  return `## ${task.title}\n\n**Project:** ${projectName} · **Module:** ${moduleName}\n\n${task.description || "_No description provided._"}\n\n### Steps\n${subs}\n\n### Tests\n${testCases(task.title)
+  const subs = task.subtasks.map((s) => `- ${s[1] ? "[x]" : "[ ]"} ${s[0]}`).join("\n") || `- ${tr("ai.doc.none")}`;
+  return `## ${task.title}\n\n**${tr("ai.doc.project")}:** ${projectName} · **${tr("ai.doc.module")}:** ${moduleName}\n\n${task.description || tr("ai.doc.noDesc")}\n\n### ${tr("ai.doc.steps")}\n${subs}\n\n### ${tr("ai.doc.tests")}\n${testCases(task.title)
     .map((c) => `- ${c}`)
     .join("\n")}\n`;
 }
@@ -325,17 +329,17 @@ export function predictCompletion(task: Task, tasks: Task[], history: HistoryIte
   let waitDays = 0;
   const blocker = task.blockedBy ? tasks.find((t) => t.id === task.blockedBy) : undefined;
   if (blocker && blocker.status !== "done") {
-    risks.push(`blocked by "${blocker.title}"`);
+    risks.push(tr("ai.riskBlockedBy", { title: blocker.title }));
     waitDays = Math.max(0, blocker.dueOffset);
   }
-  if (load > 4) risks.push(`assignee has ${load} open tasks`);
+  if (load > 4) risks.push(tr("ai.riskLoad", { n: load }));
   const mod = taskModule(task);
   const past = history.filter((h) => h.module === mod);
   const overrun = past.length ? past.reduce((s, h) => s + h.actualHours / h.estimateHours, 0) / past.length : 1;
-  if (overrun > 1.2) risks.push(`${mod} tasks usually run ${Math.round((overrun - 1) * 100)}% over estimate`);
+  if (overrun > 1.2) risks.push(tr("ai.riskOverrun", { module: moduleName(mod), n: Math.round((overrun - 1) * 100) }));
   const predictedOffset = Math.ceil(waitDays + (remainingHours * overrun) / hoursPerDay);
   const late = predictedOffset > task.dueOffset;
-  if (task.dueOffset < 0) risks.push("already overdue");
+  if (task.dueOffset < 0) risks.push(tr("ai.riskOverdue"));
   const confidence = Math.max(0.4, Math.min(0.9, 0.85 - risks.length * 0.1));
   return { predictedOffset, late, confidence: Math.round(confidence * 100) / 100, risks };
 }
@@ -353,7 +357,7 @@ export function detectDependencies(tasks: Task[]) {
       const shared = tokens(a.title).filter((w) => tokens(b.title + " " + b.description).includes(w) && !UPSTREAM.test(w));
       const sameModule = taskModule(a) === taskModule(b) && taskModule(a) !== "General";
       if (shared.length || sameModule)
-        out.push({ from: a, to: b, reason: shared.length ? `both mention "${shared[0]}"` : `same module (${taskModule(a)}) and "${a.title}" looks upstream` });
+        out.push({ from: a, to: b, reason: shared.length ? tr("ai.depShared", { word: shared[0] }) : tr("ai.depModule", { module: moduleName(taskModule(a)), title: a.title }) });
     }
   return out.slice(0, 6);
 }
@@ -397,35 +401,35 @@ export function boardInsights(tasks: Task[], history: HistoryItem[], members: Re
   const counts: Record<string, number> = {};
   bugs.forEach((m) => (counts[m] = (counts[m] || 0) + 1));
   const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-  if (top) out.push(`${top[0]} has ${Math.round((top[1] / bugs.length) * 100)}% of high-priority work and bugs → strengthen code review and tests there.`);
+  if (top) out.push(tr("ai.insTopModule", { module: moduleName(top[0]), pct: Math.round((top[1] / bugs.length) * 100) }));
   const byPerson: Record<string, number> = {};
   history.filter((h) => h.completedDaysAgo <= 14).forEach((h) => (byPerson[h.assignee] = (byPerson[h.assignee] || 0) + 1));
   const best = Object.entries(byPerson).sort((a, b) => b[1] - a[1])[0];
-  if (best) out.push(`${members[best[0] as MemberId].name} completed ${best[1]} tasks in the last 2 weeks → send appreciation.`);
+  if (best) out.push(tr("ai.insBest", { name: members[best[0] as MemberId].name, n: best[1] }));
   const recent = history.filter((h) => h.completedDaysAgo <= 12);
   const older = history.filter((h) => h.completedDaysAgo > 12);
   const avg = (xs: HistoryItem[]) => (xs.length ? xs.reduce((s, h) => s + (h.startedDaysAgo - h.completedDaysAgo), 0) / xs.length : 0);
   if (recent.length && older.length) {
     const a = avg(older);
     const b = avg(recent);
-    out.push(`Average cycle time went from ${a.toFixed(1)}d to ${b.toFixed(1)}d (${b <= a ? "better" : "worse"}).`);
+    out.push(tr("ai.insCycle", { a: a.toFixed(1), b: b.toFixed(1), trend: b <= a ? tr("ai.better") : tr("ai.worse") }));
   }
   const blocked = tasks.filter((t) => t.blockedBy && tasks.find((x) => x.id === t.blockedBy)?.status !== "done");
-  if (blocked.length) out.push(`${blocked.length} task${blocked.length > 1 ? "s are" : " is"} blocked → unblock within 24 hours.`);
+  if (blocked.length) out.push(tr("ai.insBlocked", { n: blocked.length }));
   return out;
 }
 
 export function processImprovements(tasks: Task[], history: HistoryItem[]) {
   const out: string[] = [];
   const acc = estimateAccuracy(history);
-  if (acc < 85) out.push(`Estimates are ${acc}% accurate → add a 20% buffer for complex tasks.`);
+  if (acc < 85) out.push(tr("ai.impEstimates", { n: acc }));
   const inReview = tasks.filter((t) => t.status === "rev").length;
-  if (inReview >= 2) out.push(`${inReview} tasks waiting in review → aim for review within 1 day.`);
+  if (inReview >= 2) out.push(tr("ai.impReview", { n: inReview }));
   const overdue = tasks.filter((t) => t.status !== "done" && t.dueOffset < 0).length;
-  if (overdue) out.push(`${overdue} overdue tasks → hold a 15-minute daily triage until it's zero.`);
+  if (overdue) out.push(tr("ai.impOverdue", { n: overdue }));
   const bugShare = tasks.filter((t) => t.labels.includes("Bug") && t.status !== "done").length / Math.max(1, tasks.length);
-  if (bugShare > 0.1) out.push(`Open bugs are ${Math.round(bugShare * 100)}% of the board → raise test automation before new features.`);
-  if (!out.length) out.push("No process issues detected this sprint.");
+  if (bugShare > 0.1) out.push(tr("ai.impBugs", { n: Math.round(bugShare * 100) }));
+  if (!out.length) out.push(tr("ai.impNone"));
   return out;
 }
 
@@ -442,15 +446,15 @@ export function retrospective(tasks: Task[], history: HistoryItem[], sprintDays 
   const highDone = done.filter((h) => h.priority === "h").length;
   const blocked = tasks.filter((t) => t.blockedBy && tasks.find((x) => x.id === t.blockedBy)?.status !== "done");
   return {
-    wentWell: [`${done.length} tasks resolved (target ${target})`, `${highDone} high-priority items closed`, `Estimate accuracy ${estimateAccuracy(done)}%`],
+    wentWell: [tr("ai.retroResolved", { n: done.length, target }), tr("ai.retroHigh", { n: highDone }), tr("ai.retroAccuracy", { n: estimateAccuracy(done) })],
     improve: [
-      overran.length ? `${overran.length} tasks took 1.5x+ their estimate (${overran.map((h) => h.title).slice(0, 2).join(", ")})` : "No big estimate overruns",
-      blocked.length ? `${blocked.length} tasks still blocked` : "Nothing blocked",
+      overran.length ? tr("ai.retroOverran", { n: overran.length, titles: overran.map((h) => h.title).slice(0, 2).join(", ") }) : tr("ai.retroNoOverrun"),
+      blocked.length ? tr("ai.retroBlocked", { n: blocked.length }) : tr("ai.retroNothingBlocked"),
     ],
     actions: processImprovements(tasks, history).slice(0, 3),
     lessons: [
-      overran.length ? `${overran[0].module} work is harder than it looks; estimate it higher.` : "Estimates held up this sprint.",
-      "Keep splitting large tasks into subtasks; tasks with subtasks finished faster.",
+      overran.length ? tr("ai.lessonHarder", { module: moduleName(overran[0].module) }) : tr("ai.lessonHeld"),
+      tr("ai.lessonSplit"),
     ],
   };
 }
@@ -492,7 +496,7 @@ export function wellbeing(tasks: Task[], members: Record<MemberId, Member>, capa
       const sat = survey[m] !== undefined ? (4 - (survey[m] as number)) * 25 + 25 : 70;
       const score = Math.round(workload * 0.4 + delivery * 0.3 + sat * 0.3);
       const risk = score >= 75 ? "Low" : score >= 55 ? "Medium" : "High";
-      const suggestion = risk === "High" ? `Reduce ${members[m].name.split(" ")[0]}'s load by ${Math.max(1, open.length - (capacity[m] ?? 5))} task(s)` : risk === "Medium" ? "Check in this week" : "Healthy";
+      const suggestion = risk === "High" ? tr("ai.wbReduce", { name: members[m].name.split(" ")[0], n: Math.max(1, open.length - (capacity[m] ?? 5)) }) : risk === "Medium" ? tr("ai.wbCheckIn") : tr("ai.wbHealthy");
       return { member: m, score, risk, workload, delivery, sat, suggestion };
     });
 }

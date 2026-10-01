@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { serverTranslator } from "@/i18n/server";
 
 // Real email notifications (phase B3) via Resend.
 // Env (set in .env.local, never committed):
@@ -8,13 +9,14 @@ import { getServerSupabase } from "@/lib/supabase/server";
 //
 // Safety: only signed-in users; only to members of the sender's own workspace
 // (checked through RLS); max 50 emails per sender per hour; every send is logged
-// in email_outbox.
+// in email_outbox. The HTML wrapper is written in the sender's interface
+// language (body.locale, validated against the language registry).
 
 const MAX_PER_HOUR = 50;
 // Safe message for the browser; raw DB/provider errors only go to the server log / email_outbox
 const GENERIC_ERROR = "Operation could not be completed";
 
-type Body = { workspaceId: string; toUserId: string; subject: string; text: string; template?: string; taskUrl?: string };
+type Body = { workspaceId: string; toUserId: string; subject: string; text: string; template?: string; taskUrl?: string; locale?: string };
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
@@ -68,7 +70,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const link = body.taskUrl && /^https?:\/\//.test(body.taskUrl) ? `<p><a href="${escapeHtml(body.taskUrl)}">Open in PulseBoard</a></p>` : "";
+  const { t, dir, locale } = await serverTranslator(body.locale);
+  const link = body.taskUrl && /^https?:\/\//.test(body.taskUrl) ? `<p><a href="${escapeHtml(body.taskUrl)}">${escapeHtml(t("email.open"))}</a></p>` : "";
   let res: Response;
   try {
     res = await fetch("https://api.resend.com/emails", {
@@ -79,7 +82,7 @@ export async function POST(req: Request) {
         to: [profile.email],
         subject,
         text,
-        html: `<p>Hi ${escapeHtml(profile.full_name || "there")},</p><p>${escapeHtml(text)}</p>${link}<p style="color:#63788b;font-size:12px">You're receiving this because you're a member of a PulseBoard workspace.</p>`,
+        html: `<div dir="${dir}" lang="${locale}"><p>${escapeHtml(t("email.greeting", { name: profile.full_name || t("email.there") }))}</p><p>${escapeHtml(text)}</p>${link}<p style="color:#63788b;font-size:12px">${escapeHtml(t("email.footer"))}</p></div>`,
       }),
     });
   } catch {

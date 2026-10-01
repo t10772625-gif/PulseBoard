@@ -4,6 +4,8 @@ import { FormEvent, useEffect, useState } from "react";
 import { getSupabase, supabaseConfigured } from "@/lib/supabase/client";
 import { AuthHero } from "@/components/AuthHero";
 import { PasswordInput } from "@/components/PasswordInput";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { useT } from "@/i18n/I18nProvider";
 
 // Reached from /auth/callback after a recovery link sets a session.
 export default function Page() {
@@ -11,6 +13,7 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
+  const { t } = useT();
 
   useEffect(() => {
     getSupabase()
@@ -26,13 +29,13 @@ export default function Page() {
     const form = new FormData(e.currentTarget);
     const password = String(form.get("password") ?? "");
     const confirm = String(form.get("confirm") ?? "");
-    if (password.length < 8) return setError("Password must be at least 8 characters.");
-    if (password !== confirm) return setError("Passwords don't match.");
+    if (password.length < 8) return setError(t("reset.short"));
+    if (password !== confirm) return setError(t("reset.mismatch"));
     setBusy(true);
     const { error } = await supabase.auth.updateUser({ password });
     if (error) {
       setBusy(false);
-      return setError(error.status === 422 ? "Choose a different password from your current one." : "Could not update password. Request a new link and try again.");
+      return setError(error.status === 422 ? t("reset.same") : t("reset.failed"));
     }
     // End the recovery session so the user signs in fresh with the new password.
     await supabase.auth.signOut();
@@ -43,48 +46,51 @@ export default function Page() {
   return (
     <section className="auth">
       <AuthHero
-        cardA={{ title: "Design hero section", subtitle: "In progress, Ali" }}
-        cardB={{ title: "Project health 82", subtitle: "Website redesign" }}
-        heading="Choose a new password."
-        description="Use at least 8 characters. You'll log in with it right after."
+        cardA={{ title: t("auth.loginCardA"), subtitle: t("auth.loginCardASub") }}
+        cardB={{ title: t("auth.cardB"), subtitle: t("auth.cardBSub") }}
+        heading={t("reset.heroHeading")}
+        description={t("reset.heroDesc")}
       />
       <div className="fw">
         <form className="form" onSubmit={submit}>
+          <div className="auth-lang">
+            <LanguageSwitcher />
+          </div>
           <div>
-            <h1>Set a new password</h1>
+            <h1>{t("reset.title")}</h1>
           </div>
           {!supabaseConfigured ? (
-            <p className="warn" role="alert">Password reset isn&apos;t available in demo mode.</p>
+            <p className="warn" role="alert">{t("forgot.demo")}</p>
           ) : done ? (
             <>
-              <p className="approval approved" role="status">Your password was updated.</p>
+              <p className="approval approved" role="status">{t("reset.done")}</p>
               <Link className="btn" href="/login" style={{ textAlign: "center" }}>
-                Log in
+                {t("auth.logIn")}
               </Link>
             </>
           ) : hasSession === null ? (
-            <p className="mute">Checking your link…</p>
+            <p className="mute">{t("reset.checking")}</p>
           ) : !hasSession ? (
             <p className="warn" role="alert">
-              This page needs a valid reset link.{" "}
+              {t("reset.needsLink")}{" "}
               <Link className="link" href="/forgot-password">
-                Request a new one
+                {t("reset.requestNew")}
               </Link>
               .
             </p>
           ) : (
             <>
               <label>
-                New password
+                {t("profile.new")}
                 <PasswordInput name="password" autoComplete="new-password" minLength={8} required />
               </label>
               <label>
-                Confirm new password
+                {t("profile.confirm")}
                 <PasswordInput name="confirm" autoComplete="new-password" minLength={8} required />
               </label>
               {error && <p className="warn" role="alert">{error}</p>}
               <button className="btn" disabled={busy}>
-                {busy ? "Please wait…" : "Update password"}
+                {busy ? t("auth.wait") : t("profile.update")}
               </button>
             </>
           )}

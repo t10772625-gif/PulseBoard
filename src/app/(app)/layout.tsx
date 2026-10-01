@@ -14,12 +14,14 @@ import AddColumnModal from "@/components/AddColumnModal";
 import InviteModal from "@/components/InviteModal";
 import { useStore } from "@/lib/store";
 import { getSupabase } from "@/lib/supabase/client";
-import { PERMISSIONS, pagePermissionFor } from "@/lib/permissions";
+import { pagePermissionFor } from "@/lib/permissions";
+import { useT } from "@/i18n/I18nProvider";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { loggedIn, login, logout, openTaskId, closeDrawer, allowed, viewAsRole, workspaceStatus, retryWorkspace } = useStore();
   const router = useRouter();
   const pathname = usePathname();
+  const { t } = useT();
   // Page-level RBAC: a role without the page permission sees this instead of the page
   const pagePerm = pagePermissionFor(pathname);
   const blocked = pagePerm !== null && !allowed(pagePerm);
@@ -44,15 +46,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="ws-state">
         {workspaceStatus === "loading" ? (
           <p className="mute" role="status">
-            Loading your workspace…
+            {t("layout.loadingWorkspace")}
           </p>
         ) : (
           <div className="card" role="alert">
-            <h2>Couldn&apos;t load your workspace</h2>
-            <p className="mute">Check your connection and try again. If it keeps failing, the database may be missing a migration.</p>
+            <h2>{t("layout.loadFailedTitle")}</h2>
+            <p className="mute">{t("layout.loadFailedBody")}</p>
             <div className="pill-row" style={{ marginTop: 12 }}>
               <button className="btn" onClick={retryWorkspace}>
-                Retry
+                {t("common.retry")}
               </button>
               <button
                 className="ghost"
@@ -61,7 +63,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   router.replace("/login");
                 }}
               >
-                Log out
+                {t("common.logOut")}
               </button>
             </div>
           </div>
@@ -79,12 +81,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="page">
             {blocked ? (
               <div className="card no-access">
-                <h2>No access</h2>
+                <h2>{t("layout.noAccessTitle")}</h2>
                 <p className="mute">
-                  The {viewAsRole} role can&apos;t open {PERMISSIONS.find((p) => p.key === pagePerm)?.label ?? "this page"}. Ask your workspace admin if you need it.
+                  {t("layout.noAccessBody", { role: t(`role.${viewAsRole}`), page: pagePerm ? t(`perm.${pagePerm}`) : t("layout.thisPage") })}
                 </p>
                 <Link className="btn" href="/dashboard" style={{ marginTop: 12 }}>
-                  Go to Home
+                  {t("layout.goHome")}
                 </Link>
               </div>
             ) : (
@@ -94,7 +96,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <div className={`ov ${openTaskId ? "on" : ""}`} onClick={closeDrawer}></div>
-      <div className={`dr ${openTaskId ? "on" : ""}`} role="dialog" aria-modal="true" aria-label="Task details">
+      <div className={`dr ${openTaskId ? "on" : ""}`} role="dialog" aria-modal="true" aria-label={t("layout.taskDetails")}>
         {openTaskId && <TaskDrawer taskId={openTaskId} />}
       </div>
       <CommandPalette />

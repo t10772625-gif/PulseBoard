@@ -3,37 +3,39 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { ProjectId } from "@/types";
+import { useT } from "@/i18n/I18nProvider";
 
 type Item = { label: string; icon: string; run: () => void };
 
 export default function CommandPalette() {
   const { paletteOpen, closePalette, openPalette, openDrawer, toggleTheme, currentProjectId, tasks, projects, openNewTaskModal } = useStore();
   const router = useRouter();
+  const { t: tt } = useT();
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const allItems: Item[] = [
-    { label: "Go to Home", icon: "⌂", run: () => router.push("/dashboard") },
-    { label: "Go to Projects", icon: "▤", run: () => router.push("/projects") },
-    { label: "Go to My Day", icon: "☀", run: () => router.push("/day") },
-    { label: "Go to Inbox", icon: "✉", run: () => router.push("/inbox") },
-    { label: "Go to Team", icon: "☺", run: () => router.push("/team") },
-    { label: "Go to AI assistant", icon: "✨", run: () => router.push("/ai") },
-    { label: "Go to Analytics", icon: "📊", run: () => router.push("/analytics") },
-    { label: "Go to Clients", icon: "💼", run: () => router.push("/clients") },
-    { label: "Go to Automations", icon: "⚡", run: () => router.push("/automations") },
-    { label: "Go to Integrations", icon: "🔌", run: () => router.push("/integrations") },
-    { label: "Go to Archive & trash", icon: "🗄", run: () => router.push("/archive") },
-    { label: "Go to Settings", icon: "⚙", run: () => router.push("/settings") },
-    { label: "Create a task", icon: "＋", run: () => openNewTaskModal(currentProjectId) },
-    { label: "Switch theme", icon: "◐", run: toggleTheme },
+    { label: tt("palette.home"), icon: "⌂", run: () => router.push("/dashboard") },
+    { label: tt("palette.projects"), icon: "▤", run: () => router.push("/projects") },
+    { label: tt("palette.day"), icon: "☀", run: () => router.push("/day") },
+    { label: tt("palette.inbox"), icon: "✉", run: () => router.push("/inbox") },
+    { label: tt("palette.team"), icon: "☺", run: () => router.push("/team") },
+    { label: tt("palette.ai"), icon: "✨", run: () => router.push("/ai") },
+    { label: tt("palette.analytics"), icon: "📊", run: () => router.push("/analytics") },
+    { label: tt("palette.clients"), icon: "💼", run: () => router.push("/clients") },
+    { label: tt("palette.automations"), icon: "⚡", run: () => router.push("/automations") },
+    { label: tt("palette.integrations"), icon: "🔌", run: () => router.push("/integrations") },
+    { label: tt("palette.archive"), icon: "🗄", run: () => router.push("/archive") },
+    { label: tt("palette.settings"), icon: "⚙", run: () => router.push("/settings") },
+    { label: tt("palette.createTask"), icon: "＋", run: () => openNewTaskModal(currentProjectId) },
+    { label: tt("palette.theme"), icon: "◐", run: toggleTheme },
     ...(Object.keys(projects) as ProjectId[]).map((k) => ({
-      label: "Open " + projects[k].name + " board",
+      label: tt("palette.openBoard", { name: projects[k].name }),
       icon: "▦",
       run: () => router.push(`/projects/${k}`),
     })),
-    ...tasks.map((t) => ({ label: "Task: " + t.title, icon: "✓", run: () => openDrawer(t.id) })),
+    ...tasks.map((t) => ({ label: tt("palette.task", { title: t.title }), icon: "✓", run: () => openDrawer(t.id) })),
   ];
 
   const items = allItems.filter((x) => x.label.toLowerCase().includes(query.toLowerCase())).slice(0, 8);
@@ -76,7 +78,7 @@ export default function CommandPalette() {
       <div className={`pal ${paletteOpen ? "" : "hide"}`}>
         <input
           ref={inputRef}
-          placeholder="Type a command or task name"
+          placeholder={tt("palette.placeholder")}
           autoComplete="off"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -102,7 +104,7 @@ export default function CommandPalette() {
             ))
           ) : (
             <p className="mute" style={{ padding: "14px 18px" }}>
-              Nothing found. Try another word.
+              {tt("palette.nothing")}
             </p>
           )}
         </div>

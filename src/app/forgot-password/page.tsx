@@ -4,9 +4,12 @@ import { FormEvent, Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getSupabase, supabaseConfigured } from "@/lib/supabase/client";
 import { AuthHero } from "@/components/AuthHero";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { useT } from "@/i18n/I18nProvider";
 
 function ForgotForm() {
   const linkError = useSearchParams().get("error") === "link";
+  const { t } = useT();
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -24,41 +27,44 @@ function ForgotForm() {
     setBusy(false);
     // Only rate limiting is surfaced; every other outcome shows the same message
     // so the form can't be used to find out which emails have accounts.
-    if (error && error.status === 429) return setError("Too many requests. Please wait a while and try again.");
+    if (error && error.status === 429) return setError(t("forgot.tooMany"));
     setSent(true);
   }
 
   return (
     <form className="form" onSubmit={submit}>
+      <div className="auth-lang">
+        <LanguageSwitcher />
+      </div>
       <div>
-        <h1>Reset your password</h1>
-        <p className="mute">Enter your account email and we&apos;ll send you a link to set a new password.</p>
+        <h1>{t("forgot.title")}</h1>
+        <p className="mute">{t("forgot.hint")}</p>
       </div>
       {!supabaseConfigured ? (
-        <p className="warn" role="alert">Password reset isn&apos;t available in demo mode.</p>
+        <p className="warn" role="alert">{t("forgot.demo")}</p>
       ) : sent ? (
         <p className="approval approved" role="status">
-          If an account exists for that email, a reset link is on its way. Open it in this same browser.
+          {t("forgot.sent")}
         </p>
       ) : (
         <>
           {linkError && (
-            <p className="warn" role="alert">That link is invalid or has expired. Request a new one.</p>
+            <p className="warn" role="alert">{t("forgot.linkInvalid")}</p>
           )}
           <label>
-            Email
-            <input name="email" type="email" autoComplete="email" required />
+            {t("common.email")}
+            <input name="email" type="email" dir="ltr" autoComplete="email" required />
           </label>
           {error && <p className="warn" role="alert">{error}</p>}
           <button className="btn" disabled={busy}>
-            {busy ? "Please wait…" : "Send reset link"}
+            {busy ? t("auth.wait") : t("forgot.send")}
           </button>
         </>
       )}
       <p className="mute" style={{ textAlign: "center" }}>
-        Remembered it?{" "}
+        {t("forgot.remembered")}{" "}
         <Link className="link" href="/login">
-          Log in
+          {t("auth.logIn")}
         </Link>
       </p>
     </form>
@@ -66,13 +72,14 @@ function ForgotForm() {
 }
 
 export default function Page() {
+  const { t } = useT();
   return (
     <section className="auth">
       <AuthHero
-        cardA={{ title: "Design hero section", subtitle: "In progress, Ali" }}
-        cardB={{ title: "Project health 82", subtitle: "Website redesign" }}
-        heading="Locked out? Let's get you back in."
-        description="We'll email you a secure, one-time link to choose a new password."
+        cardA={{ title: t("auth.loginCardA"), subtitle: t("auth.loginCardASub") }}
+        cardB={{ title: t("auth.cardB"), subtitle: t("auth.cardBSub") }}
+        heading={t("forgot.heroHeading")}
+        description={t("forgot.heroDesc")}
       />
       <div className="fw">
         <Suspense>

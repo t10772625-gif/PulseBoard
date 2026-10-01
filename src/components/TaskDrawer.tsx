@@ -4,11 +4,12 @@ import { Archive, Camera, Copy, Crosshair, Link2, Sparkles, Trash2 } from "lucid
 import { useStore, isBlocked, liveTrackedSeconds } from "@/lib/store";
 import { useTick } from "@/lib/useTick";
 import { PRIORITY_LABEL, TODAY, dateForOffset, formatDuration, offsetForDate } from "@/lib/mock-data";
-import { autoDoc, autoPriority, autoTags, estimateFor, findDuplicates, predictCompletion, smartMatch, splitTask, taskModule, testCases } from "@/lib/ai";
+import { autoDoc, autoPriority, autoTags, estimateFor, findDuplicates, moduleName, predictCompletion, smartMatch, splitTask, taskModule, testCases } from "@/lib/ai";
 import { Comment, Energy, MemberId, Priority, Recurrence, Status, Task } from "@/types";
 import { Avatar, Switch } from "./ui";
 import Dropdown from "./Dropdown";
 import Gate from "./Gate";
+import { useT } from "@/i18n/I18nProvider";
 
 function activityIcon(message: string) {
   if (message.includes("commented") || message.includes("replied")) return "💬";
@@ -36,6 +37,7 @@ function isDescendantOf(comment: Comment, rootId: string, all: Comment[]): boole
 
 function CommentRow({ comment, locked, hintParentName }: { comment: Comment; locked: boolean; hintParentName?: string }) {
   const { members, toggleCommentLike, addComment } = useStore();
+  const { t: tt } = useT();
   const [replying, setReplying] = useState(false);
   const [replyText, setReplyText] = useState("");
   const liked = comment.likedBy.includes("me");
@@ -58,7 +60,7 @@ function CommentRow({ comment, locked, hintParentName }: { comment: Comment; loc
         <b>{members[comment.author].name}</b> <span className="mute">{comment.at}</span>
         {hintParentName && (
           <div className="mute" style={{ fontSize: 11 }}>
-            ↳ replying to {hintParentName}
+            {tt("drawer.replyingTo", { name: hintParentName })}
           </div>
         )}
         <p dangerouslySetInnerHTML={{ __html: safe.replace(/@(\w+)/g, "<mark>@$1</mark>") }} />
@@ -75,7 +77,7 @@ function CommentRow({ comment, locked, hintParentName }: { comment: Comment; loc
                 {liked ? "❤" : "🤍"} {comment.likedBy.length > 0 ? comment.likedBy.length : ""}
               </button>
               <button className="reply-link" onClick={() => setReplying((r) => !r)}>
-                Reply
+                {tt("drawer.reply")}
               </button>
             </div>
             {replying && (
@@ -84,11 +86,11 @@ function CommentRow({ comment, locked, hintParentName }: { comment: Comment; loc
                   autoFocus
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
-                  placeholder={`Reply to ${members[comment.author].name}`}
+                  placeholder={tt("drawer.replyTo", { name: members[comment.author].name })}
                   onKeyDown={(e) => e.key === "Enter" && submitReply()}
                 />
                 <button className="btn" onClick={submitReply}>
-                  Reply
+                  {tt("drawer.reply")}
                 </button>
               </div>
             )}
@@ -124,6 +126,8 @@ function CommentThread({ root, allComments, locked }: { root: Comment; allCommen
 // AI assist panel: every suggestion is rule-based (src/lib/ai.ts) and needs a click to apply.
 function AiAssist({ task, locked }: { task: Task; locked: boolean }) {
   const { tasks, members, capacity, history, projects, setTaskField, updateTask, addSubtask, archiveTasks, addComment, openDrawer, toast, spendAi, can } = useStore();
+  const { t: tt, rich } = useT();
+  const me = members.me?.name.split(" ")[0] ?? tt("common.you");
   const [open, setOpen] = useState<string | null>(null);
   const run = (key: string) => {
     if (open === key) return setOpen(null);
@@ -135,7 +139,7 @@ function AiAssist({ task, locked }: { task: Task; locked: boolean }) {
   const pred = open === "pred" ? predictCompletion(task, tasks, history) : null;
 
   const btn = (key: string, label: string, feature: string) => (
-    <button className={`ghost sm ${open === key ? "on" : ""}`} disabled={locked && key !== "doc" && key !== "pred"} onClick={() => (can(feature) ? run(key) : toast(`${label} needs an upgrade`))}>
+    <button className={`ghost sm ${open === key ? "on" : ""}`} disabled={locked && key !== "doc" && key !== "pred"} onClick={() => (can(feature) ? run(key) : toast(tt("drawer.needsUpgrade", { feature: label })))}>
       {label}
       {!can(feature) && " 🔒"}
     </button>
@@ -145,20 +149,23 @@ function AiAssist({ task, locked }: { task: Task; locked: boolean }) {
     <div className="card ai-box">
       <div className="meta" style={{ marginBottom: 8 }}>
         <h2 style={{ margin: 0, display: "flex", gap: 6, alignItems: "center" }}>
-          <Sparkles size={16} /> AI assist
+          <Sparkles size={16} /> {tt("drawer.aiAssist")}
         </h2>
         <span className="mute" style={{ fontSize: 12 }}>
-          Module: {taskModule(task)}
+          {tt("drawer.module", { module: moduleName(taskModule(task)) })}
         </span>
       </div>
+      <p className="mute" style={{ fontSize: 12, margin: "-4px 0 8px" }}>
+        {tt("drawer.aiRuleBased")}
+      </p>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {btn("match", "Smart match", "AI-01")}
-        {btn("prio", "Auto-priority", "AI-04")}
-        {btn("dups", "Duplicates", "AI-03")}
-        {btn("split", "Split", "AI-23")}
-        {btn("pred", "Predict", "AI-18")}
-        {btn("tests", "Test cases", "AI-14")}
-        {btn("doc", "Auto-doc", "AI-20")}
+        {btn("match", tt("drawer.btnMatch"), "AI-01")}
+        {btn("prio", tt("drawer.btnPrio"), "AI-04")}
+        {btn("dups", tt("drawer.btnDups"), "AI-03")}
+        {btn("split", tt("drawer.btnSplit"), "AI-23")}
+        {btn("pred", tt("drawer.btnPred"), "AI-18")}
+        {btn("tests", tt("drawer.btnTests"), "AI-14")}
+        {btn("doc", tt("drawer.btnDoc"), "AI-20")}
       </div>
 
       {match && (
@@ -166,7 +173,7 @@ function AiAssist({ task, locked }: { task: Task; locked: boolean }) {
           {match.results.slice(0, 3).map((r, i) => (
             <div key={r.member} className="sugg">
               <span>
-                <Avatar id={r.member} /> <b>{members[r.member].name}</b> {i === 0 && <span className="chip">best match</span>}
+                <Avatar id={r.member} /> <b>{members[r.member].name}</b> {i === 0 && <span className="chip">{tt("drawer.bestMatch")}</span>}
                 <br />
                 <span className="mute" style={{ fontSize: 12 }}>
                   {r.reason}
@@ -177,11 +184,11 @@ function AiAssist({ task, locked }: { task: Task; locked: boolean }) {
                 disabled={task.assignee === r.member}
                 onClick={() => {
                   setTaskField(task.id, "assignee", r.member);
-                  addComment(task.id, `Smart match: assigned to ${members[r.member].name} (${r.reason}, confidence ${Math.round(match.confidence * 100)}%)`);
-                  toast(`Assigned to ${members[r.member].name}`);
+                  addComment(task.id, tt("drawer.matchComment", { name: members[r.member].name, reason: r.reason, pct: Math.round(match.confidence * 100) }));
+                  toast(tt("drawer.assignedTo", { name: members[r.member].name }));
                 }}
               >
-                {task.assignee === r.member ? "Assigned" : "Assign"}
+                {task.assignee === r.member ? tt("drawer.assigned") : tt("drawer.assign")}
               </button>
             </div>
           ))}
@@ -190,16 +197,14 @@ function AiAssist({ task, locked }: { task: Task; locked: boolean }) {
 
       {prio && (
         <div className="ai-out">
-          <p>
-            Suggested: <b>{PRIORITY_LABEL[prio.priority]}</b> (score {prio.score}/10)
-          </p>
-          <ul className="mute" style={{ fontSize: 12, margin: "4px 0 8px 18px" }}>
+          <p>{rich("drawer.suggested", { priority: PRIORITY_LABEL[prio.priority], score: prio.score })}</p>
+          <ul className="mute" style={{ fontSize: 12, margin: 0, marginBlock: "4px 8px", paddingInlineStart: 18 }}>
             {prio.reasons.map((r) => (
               <li key={r}>{r}</li>
             ))}
           </ul>
           <button className="btn sm" disabled={prio.priority === task.priority} onClick={() => setTaskField(task.id, "priority", prio.priority)}>
-            {prio.priority === task.priority ? "Already set" : "Apply"}
+            {prio.priority === task.priority ? tt("drawer.alreadySet") : tt("common.apply")}
           </button>
         </div>
       )}
@@ -210,24 +215,24 @@ function AiAssist({ task, locked }: { task: Task; locked: boolean }) {
             dups.map((d) => (
               <div key={d.task.id} className="sugg">
                 <button className="link" onClick={() => openDrawer(d.task.id)}>
-                  {d.task.title} <span className="mute">({Math.round(d.score * 100)}% match)</span>
+                  {d.task.title} <span className="mute">{tt("drawer.matchPct", { pct: Math.round(d.score * 100) })}</span>
                 </button>
                 <button
                   className="ghost sm"
                   onClick={() => {
-                    addComment(d.task.id, `Merged duplicate "${task.title}": ${task.description || "no extra details"}`);
+                    addComment(d.task.id, tt("drawer.mergedComment", { title: task.title, details: task.description || tt("drawer.noExtraDetails") }));
                     updateTask(d.task.id, { labels: Array.from(new Set([...d.task.labels, ...task.labels])) });
                     archiveTasks([task.id]);
                     openDrawer(d.task.id);
-                    toast("Merged into the existing task");
+                    toast(tt("drawer.merged"));
                   }}
                 >
-                  Merge into this
+                  {tt("drawer.mergeInto")}
                 </button>
               </div>
             ))
           ) : (
-            <p className="mute">No similar tasks found.</p>
+            <p className="mute">{tt("drawer.noSimilar")}</p>
           )}
         </div>
       )}
@@ -238,7 +243,7 @@ function AiAssist({ task, locked }: { task: Task; locked: boolean }) {
             <div key={s} className="sugg">
               <span>{s}</span>
               <button className="ghost sm" onClick={() => addSubtask(task.id, s)}>
-                ＋ Add
+                ＋ {tt("common.add")}
               </button>
             </div>
           ))}
@@ -248,10 +253,10 @@ function AiAssist({ task, locked }: { task: Task; locked: boolean }) {
       {pred && (
         <div className="ai-out">
           <p>
-            Likely done <b>{dateForOffset(pred.predictedOffset)}</b> ({Math.round(pred.confidence * 100)}% confidence) —{" "}
-            <b style={{ color: pred.late ? "var(--bad)" : "var(--acc)" }}>{pred.late ? `late vs due ${dateForOffset(task.dueOffset)}` : "on time"}</b>
+            {rich("drawer.likelyDone", { date: dateForOffset(pred.predictedOffset), pct: Math.round(pred.confidence * 100) })}{" "}
+            <b style={{ color: pred.late ? "var(--bad)" : "var(--acc)" }}>{pred.late ? tt("drawer.lateVs", { date: dateForOffset(task.dueOffset) }) : tt("drawer.onTime")}</b>
           </p>
-          {pred.risks.length > 0 && <p className="mute" style={{ fontSize: 12 }}>Risks: {pred.risks.join("; ")}</p>}
+          {pred.risks.length > 0 && <p className="mute" style={{ fontSize: 12 }}>{tt("drawer.risks", { risks: pred.risks.join("; ") })}</p>}
         </div>
       )}
 
@@ -265,26 +270,26 @@ function AiAssist({ task, locked }: { task: Task; locked: boolean }) {
           <button
             className="ghost sm"
             onClick={() => {
-              updateTask(task.id, { checklist: [...(task.checklist ?? []), ...testCases(task.title).map((c) => [c, 0] as [string, 0 | 1])] }, "Ali added AI test cases to the checklist");
-              toast("Added to checklist");
+              updateTask(task.id, { checklist: [...(task.checklist ?? []), ...testCases(task.title).map((c) => [c, 0] as [string, 0 | 1])] }, tt("drawer.testsActivity", { name: me }));
+              toast(tt("drawer.addedChecklist"));
             }}
           >
-            Add to checklist
+            {tt("drawer.addToChecklist")}
           </button>
         </div>
       )}
 
       {open === "doc" && (
         <div className="ai-out">
-          <pre className="doc-pre">{autoDoc(task, projects[task.projectId].name, taskModule(task))}</pre>
+          <pre className="doc-pre">{autoDoc(task, projects[task.projectId].name, moduleName(taskModule(task)))}</pre>
           <button
             className="ghost sm"
             onClick={() => {
-              navigator.clipboard?.writeText(autoDoc(task, projects[task.projectId].name, taskModule(task)));
-              toast("Copied as Markdown");
+              navigator.clipboard?.writeText(autoDoc(task, projects[task.projectId].name, moduleName(taskModule(task))));
+              toast(tt("drawer.copiedMd"));
             }}
           >
-            Copy Markdown
+            {tt("drawer.copyMd")}
           </button>
         </div>
       )}
@@ -329,6 +334,8 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
     can,
     allowed,
   } = useStore();
+  const { t: tt, rich } = useT();
+  const me = members.me?.name.split(" ")[0] ?? tt("common.you");
   const [commentText, setCommentText] = useState("");
   const [subtaskText, setSubtaskText] = useState("");
   const [checkText, setCheckText] = useState("");
@@ -359,24 +366,24 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
 
   function onStatusChange(v: Status) {
     if (v === "done" && isBlocked(task!, tasks)) {
-      toast(`🔒 Blocked by "${blocker!.title}". Finish it first.`);
+      toast(tt("board.blockedBy", { title: blocker!.title }));
       return;
     }
     setTaskField(taskId, "status", v);
-    toast("Moved to " + columnLabel(task!.projectId, v));
+    toast(tt("board.movedTo", { column: columnLabel(task!.projectId, v) }));
   }
 
   function postComment() {
     const text = commentText.trim();
-    if (!text) return toast("Write a comment first");
+    if (!text) return toast(tt("drawer.writeComment"));
     addComment(taskId, text);
     setCommentText("");
-    toast("Comment posted");
+    toast(tt("drawer.commentPosted"));
   }
 
   function submitSubtask() {
     const text = subtaskText.trim();
-    if (!text) return toast("Enter a subtask title first");
+    if (!text) return toast(tt("drawer.enterSubtask"));
     addSubtask(taskId, text);
     setSubtaskText("");
   }
@@ -385,13 +392,13 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
     const token = createShareLink("task", taskId);
     const url = `${window.location.origin}/share/${token}`;
     navigator.clipboard?.writeText(url);
-    toast("Read-only link copied");
+    toast(tt("drawer.linkCopied"));
   }
 
   const addLabel = (l: string) => {
     const v = l.trim();
     if (!v || task.labels.includes(v)) return;
-    updateTask(taskId, { labels: [...task.labels, v] }, `Ali added label "${v}"`);
+    updateTask(taskId, { labels: [...task.labels, v] }, tt("drawer.actLabel", { name: me, label: v }));
   };
 
   return (
@@ -401,11 +408,11 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
           {projects[task.projectId]?.name}
         </span>
         <span style={{ display: "flex", gap: 6 }}>
-          <button className="ic" aria-label="Focus on this task" title="Focus mode" onClick={() => setFocusTaskId(taskId)}>
+          <button className="ic" aria-label={tt("drawer.focus")} title={tt("drawer.focusMode")} onClick={() => setFocusTaskId(taskId)}>
             <Crosshair size={16} />
           </button>
           {can("COL-04") && allowed("share.create") && (
-            <button className="ic" aria-label="Copy share link" title="Share read-only link" onClick={share}>
+            <button className="ic" aria-label={tt("drawer.copyShare")} title={tt("drawer.shareLink")} onClick={share}>
               <Link2 size={16} />
             </button>
           )}
@@ -413,13 +420,13 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
             <>
               <button
                 className="ic"
-                aria-label="Duplicate task"
-                title="Duplicate"
+                aria-label={tt("drawer.duplicateTask")}
+                title={tt("drawer.duplicate")}
                 onClick={() => {
                   const id = cloneTask(taskId);
                   if (id) {
                     openDrawer(id);
-                    toast("Task duplicated");
+                    toast(tt("drawer.duplicated"));
                   }
                 }}
               >
@@ -428,16 +435,16 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
             </>
           )}
           {allowed("task.archive") && (
-            <button className="ic" aria-label="Archive task" title="Archive" onClick={() => archiveTasks([taskId])}>
+            <button className="ic" aria-label={tt("drawer.archiveTask")} title={tt("drawer.archive")} onClick={() => archiveTasks([taskId])}>
               <Archive size={16} />
             </button>
           )}
           {allowed("task.delete") && (
-            <button className="ic" aria-label="Delete task" title="Delete (undo available)" onClick={() => deleteTask(taskId)}>
+            <button className="ic" aria-label={tt("drawer.deleteTask")} title={tt("drawer.deleteUndo")} onClick={() => deleteTask(taskId)}>
               <Trash2 size={16} />
             </button>
           )}
-          <button className="ic" aria-label="Close" onClick={closeDrawer}>
+          <button className="ic" aria-label={tt("common.close")} onClick={closeDrawer}>
             ✕
           </button>
         </span>
@@ -447,10 +454,10 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
         className="title-edit"
         defaultValue={task.title}
         disabled={locked}
-        aria-label="Task title"
+        aria-label={tt("drawer.taskTitle")}
         onBlur={(e) => {
           const v = e.target.value.trim();
-          if (v && v !== task.title) updateTask(taskId, { title: v }, `Ali renamed this to "${v}"`);
+          if (v && v !== task.title) updateTask(taskId, { title: v }, tt("drawer.actRenamed", { name: me, title: v }));
         }}
         onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
       />
@@ -458,9 +465,9 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
       {task.id === "t1" && (
         <div className="pres">
           <Avatar id="ak" ring />
-          Ayesha is viewing{" "}
+          {tt("drawer.isViewing")}{" "}
           <span className="ty">
-            is typing
+            {tt("drawer.isTyping")}
             <i></i>
             <i></i>
             <i></i>
@@ -470,28 +477,28 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
 
       {blockedActive && (
         <button className="warn" onClick={() => openDrawer(blocker!.id)}>
-          🔒 Blocked by &quot;{blocker!.title}&quot;. This task cannot move to Done until that one is finished.
+          {tt("drawer.blockedWarn", { title: blocker!.title })}
         </button>
       )}
 
       {task.status === "done" && (
         <p className="mute" style={{ marginBottom: 12 }}>
-          This task is done and locked. Only status can be changed — reopen it to edit anything else.
+          {tt("drawer.doneLocked")}
         </p>
       )}
       {!canEdit && (
         <p className="mute" style={{ marginBottom: 12 }}>
-          You&apos;re viewing as a Viewer — read only.
+          {tt("drawer.viewerRO")}
         </p>
       )}
 
       <div className="f2" style={{ marginBottom: 12 }}>
         <label>
-          Status
-          <Dropdown value={task.status} onChange={onStatusChange} disabled={!canEdit} options={getColumns(task.projectId).map(([s, label]) => ({ value: s, label }))} />
+          {tt("common.status")}
+          <Dropdown value={task.status} onChange={onStatusChange} disabled={!canEdit} options={getColumns(task.projectId).map(([s]) => ({ value: s, label: columnLabel(task.projectId, s) }))} />
         </label>
         <label>
-          Priority
+          {tt("common.priority")}
           <Dropdown
             value={task.priority}
             onChange={(v: Priority) => setTaskField(taskId, "priority", v)}
@@ -500,7 +507,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
           />
         </label>
         <label>
-          Assignee
+          {tt("common.assignee")}
           <Dropdown
             value={task.assignee}
             onChange={(v: MemberId) => setTaskField(taskId, "assignee", v)}
@@ -509,19 +516,19 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
           />
         </label>
         <label>
-          Due
+          {tt("board.colDue")}
           <input
             type="date"
             value={dueIso}
             disabled={locked}
-            onChange={(e) => e.target.value && updateTask(taskId, { dueOffset: offsetForDate(e.target.value) }, `Ali set due date to ${dateForOffset(offsetForDate(e.target.value))}`)}
+            onChange={(e) => e.target.value && updateTask(taskId, { dueOffset: offsetForDate(e.target.value) }, tt("drawer.actDue", { name: me, date: dateForOffset(offsetForDate(e.target.value)) }))}
           />
         </label>
       </div>
 
       <div className="f2 f3" style={{ marginBottom: 12 }}>
         <label>
-          Estimate (h)
+          {tt("drawer.estimate")}
           <input
             type="number"
             min={0}
@@ -532,73 +539,75 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
           />
         </label>
         <label>
-          Energy
+          {tt("drawer.energy")}
           <Dropdown<Energy | "">
             value={task.energy ?? ""}
             disabled={locked || !can("TIME-07")}
             onChange={(v) => updateTask(taskId, { energy: v || undefined })}
             options={[
-              { value: "", label: can("TIME-07") ? "Not set" : "🔒 Legendary" },
-              { value: "high", label: "⚡ High" },
-              { value: "low", label: "🌙 Low" },
+              { value: "", label: can("TIME-07") ? tt("drawer.notSet") : `🔒 ${tt("plan.legendary")}` },
+              { value: "high", label: tt("drawer.energyHigh") },
+              { value: "low", label: tt("drawer.energyLow") },
             ]}
           />
         </label>
         <label>
-          Repeats
+          {tt("drawer.repeats")}
           <Dropdown<Recurrence>
             value={task.recurrence ?? "none"}
             disabled={locked || !can("CORE-11")}
-            onChange={(v) => updateTask(taskId, { recurrence: v }, v === "none" ? "Ali stopped repeating this task" : `Ali set this to repeat ${v}`)}
+            onChange={(v) => updateTask(taskId, { recurrence: v }, v === "none" ? tt("drawer.actStopRepeat", { name: me }) : tt("drawer.actRepeat", { name: me, when: tt(`drawer.${v}`) }))}
             options={[
-              { value: "none", label: can("CORE-11") ? "Never" : "🔒 Pro" },
-              { value: "daily", label: "Daily" },
-              { value: "weekly", label: "Weekly" },
-              { value: "monthly", label: "Monthly" },
+              { value: "none", label: can("CORE-11") ? tt("drawer.never") : `🔒 ${tt("plan.pro")}` },
+              { value: "daily", label: tt("drawer.daily") },
+              { value: "weekly", label: tt("drawer.weekly") },
+              { value: "monthly", label: tt("drawer.monthly") },
             ]}
           />
         </label>
         <label>
-          Blocked by
+          {tt("drawer.blockedByLabel")}
           <Dropdown<string>
             value={task.blockedBy ?? ""}
             disabled={locked || !can("CORE-12")}
             onChange={(v) => {
-              if (v && tasks.find((t) => t.id === v)?.blockedBy === taskId) return toast("That would create a loop");
-              updateTask(taskId, { blockedBy: v || undefined }, v ? `Ali marked this as blocked by "${tasks.find((t) => t.id === v)?.title}"` : "Ali removed the blocker");
+              if (v && tasks.find((t) => t.id === v)?.blockedBy === taskId) return toast(tt("drawer.loop"));
+              updateTask(taskId, { blockedBy: v || undefined }, v ? tt("drawer.actBlocked", { name: me, title: tasks.find((t) => t.id === v)?.title ?? "" }) : tt("drawer.actUnblocked", { name: me }));
             }}
             options={[
-              { value: "", label: can("CORE-12") ? "Nothing" : "🔒 Pro" },
+              { value: "", label: can("CORE-12") ? tt("drawer.nothing") : `🔒 ${tt("plan.pro")}` },
               ...tasks.filter((t) => t.id !== taskId && t.projectId === task.projectId).map((t) => ({ value: t.id, label: t.title })),
             ]}
           />
         </label>
         <div className="field-switch">
-          <span>Billable {!can("CLI-04") && "🔒"}</span>
-          <Switch label="Billable" checked={!!task.billable} disabled={locked || !can("CLI-04")} onChange={(v) => updateTask(taskId, { billable: v })} />
+          <span>
+            {tt("drawer.billable")} {!can("CLI-04") && "🔒"}
+          </span>
+          <Switch label={tt("drawer.billable")} checked={!!task.billable} disabled={locked || !can("CLI-04")} onChange={(v) => updateTask(taskId, { billable: v })} />
         </div>
       </div>
 
       <label style={{ marginBottom: 12 }}>
-        Description
+        {tt("drawer.description")}
         <textarea
           key={task.id}
           rows={3}
           defaultValue={task.description}
           disabled={locked}
-          onBlur={(e) => e.target.value !== task.description && updateTask(taskId, { description: e.target.value }, "Ali edited the description")}
+          onBlur={(e) => e.target.value !== task.description && updateTask(taskId, { description: e.target.value }, tt("drawer.actDesc", { name: me }))}
         />
       </label>
 
       <div className="meta" style={{ marginBottom: 6 }}>
-        <h2 style={{ margin: 0 }}>Labels</h2>
+        <h2 style={{ margin: 0 }}>{tt("drawer.labels")}</h2>
       </div>
       <div className="lb" style={{ marginBottom: 6, flexWrap: "wrap" }}>
         {task.labels.map((l) => (
           <span key={l}>
             {l}
             {!locked && (
-              <button className="lb-x" aria-label={`Remove ${l}`} onClick={() => updateTask(taskId, { labels: task.labels.filter((x) => x !== l) })}>
+              <button className="lb-x" aria-label={tt("drawer.removeLabel", { label: l })} onClick={() => updateTask(taskId, { labels: task.labels.filter((x) => x !== l) })}>
                 ×
               </button>
             )}
@@ -607,7 +616,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
         {!locked && (
           <input
             className="lb-input"
-            placeholder="+ label"
+            placeholder={tt("drawer.addLabel")}
             value={labelText}
             onChange={(e) => setLabelText(e.target.value)}
             onKeyDown={(e) => {
@@ -621,9 +630,9 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
       </div>
       {!locked && suggestedTags.length > 0 && can("AI-16") && (
         <p className="mute" style={{ fontSize: 12, marginBottom: 12 }}>
-          Suggested:{" "}
+          {tt("drawer.suggestedTags")}{" "}
           {suggestedTags.map((t) => (
-            <button key={t} className="chip" style={{ marginRight: 4 }} onClick={() => addLabel(t[0].toUpperCase() + t.slice(1))}>
+            <button key={t} className="chip" style={{ marginInlineEnd: 4 }} onClick={() => addLabel(t[0].toUpperCase() + t.slice(1))}>
               + {t}
             </button>
           ))}
@@ -659,15 +668,15 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
 
       {task.approval && task.approval !== "none" ? (
         <p className={`approval ${task.approval}`}>
-          {task.approval === "requested" && "⏳ Waiting for client approval"}
-          {task.approval === "approved" && "✅ Approved by the client"}
-          {task.approval === "rejected" && "❌ Changes requested by the client"}
+          {task.approval === "requested" && tt("drawer.approvalWaiting")}
+          {task.approval === "approved" && tt("drawer.approvalApproved")}
+          {task.approval === "rejected" && tt("drawer.approvalRejected")}
         </p>
       ) : (
         can("CLI-03") &&
         canEdit && (
-          <button className="ghost sm" style={{ marginBottom: 12 }} onClick={() => updateTask(taskId, { approval: "requested" }, "Ali requested client approval")}>
-            Request client approval
+          <button className="ghost sm" style={{ marginBottom: 12 }} onClick={() => updateTask(taskId, { approval: "requested" }, tt("drawer.actApproval", { name: me }))}>
+            {tt("drawer.requestApproval")}
           </button>
         )
       )}
@@ -675,7 +684,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
       <AiAssist task={task} locked={locked} />
 
       <div className="meta" style={{ marginBottom: 6 }}>
-        <h2 style={{ margin: 0 }}>Attachments</h2>
+        <h2 style={{ margin: 0 }}>{tt("drawer.attachments")}</h2>
         <span className="mute">{taskFiles.length}</span>
       </div>
       <div className="attach-grid">
@@ -688,7 +697,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
               <video src={f.url} muted />
             )}
             {!locked && (
-              <button className="attach-remove" aria-label={`Remove ${f.name}`} onClick={() => removeAttachment(taskId, f.id)}>
+              <button className="attach-remove" aria-label={tt("drawer.removeFile", { name: f.name })} onClick={() => removeAttachment(taskId, f.id)}>
                 ✕
               </button>
             )}
@@ -696,7 +705,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
         ))}
         {!locked && (
           <>
-            <label className="attach-add" title="Upload files">
+            <label className="attach-add" title={tt("drawer.upload")}>
               ＋
               <input
                 type="file"
@@ -709,7 +718,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
                 }}
               />
             </label>
-            <label className="attach-add" title="Take a photo (mobile)">
+            <label className="attach-add" title={tt("drawer.photo")}>
               <Camera size={18} />
               <input
                 type="file"
@@ -727,7 +736,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
       </div>
 
       <div className="meta" style={{ marginBottom: 6 }}>
-        <h2 style={{ margin: 0 }}>Subtasks</h2>
+        <h2 style={{ margin: 0 }}>{tt("drawer.subtasks")}</h2>
         <span className="mute">
           {doneCount}/{task.subtasks.length}
         </span>
@@ -740,19 +749,19 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
           </label>
         ))
       ) : (
-        <p className="mute">No subtasks yet.</p>
+        <p className="mute">{tt("drawer.noSubtasks")}</p>
       )}
       {!locked && (
         <div style={{ display: "flex", gap: 8, marginTop: 10, marginBottom: 16 }}>
-          <input placeholder="Add a subtask" value={subtaskText} onChange={(e) => setSubtaskText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submitSubtask()} />
+          <input placeholder={tt("drawer.addSubtask")} value={subtaskText} onChange={(e) => setSubtaskText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submitSubtask()} />
           <button className="ghost" onClick={submitSubtask}>
-            Add
+            {tt("common.add")}
           </button>
         </div>
       )}
 
       <div className="meta" style={{ marginBottom: 6 }}>
-        <h2 style={{ margin: 0 }}>Checklist</h2>
+        <h2 style={{ margin: 0 }}>{tt("drawer.checklist")}</h2>
         <span className="mute">
           {checklist.filter((c) => c[1]).length}/{checklist.length}
         </span>
@@ -766,7 +775,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
       {!locked && (
         <div style={{ display: "flex", gap: 8, marginTop: 10, marginBottom: 16 }}>
           <input
-            placeholder="Add a checklist item"
+            placeholder={tt("drawer.addChecklist")}
             value={checkText}
             onChange={(e) => setCheckText(e.target.value)}
             onKeyDown={(e) => {
@@ -784,7 +793,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
               setCheckText("");
             }}
           >
-            Add
+            {tt("common.add")}
           </button>
         </div>
       )}
@@ -796,33 +805,33 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
             style={{ margin: "16px 0", padding: 14, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}
           >
             <span>
-              <b>{formatDuration(tracked)}</b> tracked
+              {rich("drawer.tracked", { time: formatDuration(tracked) })}
               <br />
               <span className="mute" style={{ color: tracked / 3600 > estimate ? "var(--bad)" : undefined }}>
-                of {estimate}h estimated
-                {tracked > 0 && ` · ${Math.round((tracked / 3600 / Math.max(estimate, 0.1)) * 100)}% used`}
+                {tt("drawer.ofEstimate", { h: estimate })}
+                {tracked > 0 && ` · ${tt("drawer.used", { pct: Math.round((tracked / 3600 / Math.max(estimate, 0.1)) * 100) })}`}
               </span>
             </span>
             {task.status === "prog" && canEdit && (
               <div style={{ display: "flex", gap: 8 }}>
                 {!isTracking && (
                   <button className="btn" onClick={() => startTracking(taskId)}>
-                    ▶ Start
+                    {tt("drawer.start")}
                   </button>
                 )}
                 {isTracking && tracking!.status === "running" && (
                   <button className="ghost" onClick={pauseTracking}>
-                    ⏸ Pause
+                    {tt("drawer.pause")}
                   </button>
                 )}
                 {isTracking && tracking!.status === "paused" && (
                   <button className="btn" onClick={() => startTracking(taskId)}>
-                    ▶ Resume
+                    {tt("drawer.resume")}
                   </button>
                 )}
                 {isTracking && (
                   <button className="ghost" onClick={endTracking}>
-                    ⏹ End
+                    {tt("drawer.end")}
                   </button>
                 )}
               </div>
@@ -831,24 +840,24 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
         )}
       </Gate>
 
-      <h2>Comments</h2>
+      <h2>{tt("drawer.comments")}</h2>
       {topLevelComments.length ? (
         topLevelComments.map((c) => <CommentThread key={c.id} root={c} allComments={taskComments} locked={locked} />)
       ) : (
         <p className="mute" style={{ marginBottom: 12 }}>
-          No comments yet. Start the conversation.
+          {tt("drawer.noComments")}
         </p>
       )}
       {task.status !== "done" && allowed("comment.create") && (
         <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-          <input placeholder="Write a comment, use @ to mention" value={commentText} onChange={(e) => setCommentText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && postComment()} />
+          <input placeholder={tt("drawer.commentPlaceholder")} value={commentText} onChange={(e) => setCommentText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && postComment()} />
           <button className="btn" onClick={postComment}>
-            Post
+            {tt("drawer.post")}
           </button>
         </div>
       )}
 
-      <h2>Activity</h2>
+      <h2>{tt("drawer.activity")}</h2>
       <div className="tl">
         {taskActivity.map((ev) => (
           <p key={ev.id} className="act-item">

@@ -2,11 +2,13 @@ import { CSSProperties, ReactNode } from "react";
 import { Health, MemberId, Priority, Task } from "@/types";
 import { PRIORITY_LABEL, dateForOffset } from "@/lib/mock-data";
 import { useStore } from "@/lib/store";
+import { useT } from "@/i18n/I18nProvider";
 
 export function Avatar({ id, ring, large }: { id: MemberId; ring?: boolean; large?: boolean }) {
   const { members } = useStore();
+  const { t } = useT();
   // A removed member (or a stale id) still renders instead of crashing
-  const m = members[id] ?? { name: "Former member", initials: "?", colorClass: "c4" as const };
+  const m = members[id] ?? { name: t("ui.formerMember"), initials: "?", colorClass: "c4" as const };
   return (
     <span className={`av ${m.colorClass} ${ring ? "ring" : ""} ${large ? "lg" : ""}`} title={m.name}>
       {m.initials}
@@ -57,9 +59,10 @@ export function PriorityTag({ p }: { p: Priority }) {
 }
 
 export function DueLabel({ task }: { task: Task }) {
-  if (task.status === "done") return <span className="due ok">Done</span>;
-  if (task.dueOffset < 0) return <span className="due bad">{-task.dueOffset}d overdue</span>;
-  const text = task.dueOffset === 0 ? "Today" : task.dueOffset === 1 ? "Tomorrow" : dateForOffset(task.dueOffset);
+  const { t } = useT();
+  if (task.status === "done") return <span className="due ok">{t("common.done")}</span>;
+  if (task.dueOffset < 0) return <span className="due bad">{t("ui.daysOverdue", { n: -task.dueOffset })}</span>;
+  const text = task.dueOffset === 0 ? t("common.today") : task.dueOffset === 1 ? t("common.tomorrow") : dateForOffset(task.dueOffset);
   return <span className="due">{text}</span>;
 }
 
@@ -88,10 +91,12 @@ export function Ecg({ score, color, height = 48, critical }: { score: number; co
 }
 
 export function HealthBreakdown({ health, prefix }: { health: Health; prefix?: string }) {
+  const { t } = useT();
   if (health.breakdown.length === 0) {
     return (
       <p className="mute" style={{ fontSize: 12 }}>
-        {prefix ? `${prefix} ` : ""}No issues dragging this score down.
+        {prefix ? `${prefix} ` : ""}
+        {t("ui.noIssues")}
       </p>
     );
   }

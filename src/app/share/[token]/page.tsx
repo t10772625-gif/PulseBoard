@@ -2,6 +2,8 @@
 import { useParams } from "next/navigation";
 import { useStore, health } from "@/lib/store";
 import { DueLabel } from "@/components/ui";
+import { useT } from "@/i18n/I18nProvider";
+import { STATUS_LABEL } from "@/lib/mock-data";
 
 // Read-only client portal (COL-04/05, CLI-01, SPEC #25). No edit controls and no
 // internal comments are rendered; revoked links show nothing.
@@ -9,6 +11,7 @@ export default function SharedView() {
   const { token } = useParams<{ token: string }>();
   const { shareLinks, tasks, projects, branding, columnLabel, updateTask } = useStore();
   const link = shareLinks.find((l) => l.token === token);
+  const { t: tt, rich } = useT();
 
   const shell = (children: React.ReactNode) => (
     <div className="page" style={{ maxWidth: 900, margin: "0 auto" }}>
@@ -17,31 +20,31 @@ export default function SharedView() {
           <b style={branding.name !== "PulseBoard" ? { background: branding.color } : undefined}></b>
           {branding.name}
         </span>
-        <span className="chip">Read-only</span>
+        <span className="chip">{tt("share.readOnly")}</span>
       </div>
       {children}
       <p className="mute" style={{ fontSize: 11, marginTop: 24 }}>
-        Demo note: without a backend, shared links only open in the browser session that created them.
+        {tt("share.demoNote")}
       </p>
     </div>
   );
 
-  if (!link || link.revoked) return shell(<div className="card">This link is invalid or has been revoked.</div>);
+  if (!link || link.revoked) return shell(<div className="card">{tt("share.invalid")}</div>);
 
   if (link.kind === "task") {
     const t = tasks.find((x) => x.id === link.targetId);
-    if (!t) return shell(<div className="card">This task no longer exists.</div>);
+    if (!t) return shell(<div className="card">{tt("share.taskGone")}</div>);
     return shell(
       <div className="card">
         <p className="mute">{projects[t.projectId].name}</p>
         <h1>{t.title}</h1>
         <p style={{ margin: "10px 0" }}>{t.description}</p>
         <p>
-          Status: <b>{columnLabel(t.projectId, t.status)}</b> · <DueLabel task={t} />
+          {rich("share.status", { status: columnLabel(t.projectId, t.status) })} · <DueLabel task={t} />
         </p>
         {t.subtasks.length > 0 && (
           <p className="mute" style={{ marginTop: 8 }}>
-            {t.subtasks.filter((s) => s[1]).length}/{t.subtasks.length} steps done
+            {tt("share.steps", { done: t.subtasks.filter((s) => s[1]).length, total: t.subtasks.length })}
           </p>
         )}
       </div>
@@ -49,20 +52,20 @@ export default function SharedView() {
   }
 
   const p = projects[link.targetId];
-  if (!p) return shell(<div className="card">This board no longer exists.</div>);
+  if (!p) return shell(<div className="card">{tt("share.boardGone")}</div>);
   const ts = tasks.filter((t) => t.projectId === p.id);
   const h = health(p.id, tasks);
   const groups: [string, typeof ts][] = [
-    ["To do", ts.filter((t) => t.status === "todo")],
-    ["In progress", ts.filter((t) => t.status !== "todo" && t.status !== "done")],
-    ["Done", ts.filter((t) => t.status === "done")],
+    [STATUS_LABEL.todo, ts.filter((t) => t.status === "todo")],
+    [STATUS_LABEL.prog, ts.filter((t) => t.status !== "todo" && t.status !== "done")],
+    [STATUS_LABEL.done, ts.filter((t) => t.status === "done")],
   ];
   const approvals = ts.filter((t) => t.approval === "requested");
   return shell(
     <>
       <h1>{p.name}</h1>
       <p className="mute" style={{ marginBottom: 14 }}>
-        {p.description} · Health <b style={{ color: h.color }}>{h.score}</b>
+        {p.description} · {tt("share.health")} <b style={{ color: h.color }}>{h.score}</b>
       </p>
       <div className="grid g3" style={{ marginBottom: 18 }}>
         {groups.map(([label, list]) => (
@@ -74,16 +77,16 @@ export default function SharedView() {
       </div>
       {approvals.length > 0 && (
         <div className="card" style={{ marginBottom: 18, borderTop: `4px solid ${branding.color}` }}>
-          <h2>Waiting for your approval</h2>
+          <h2>{tt("share.waiting")}</h2>
           {approvals.map((t) => (
             <div key={t.id} className="sugg">
               <b>{t.title}</b>
               <span className="pill-row">
-                <button className="btn sm" onClick={() => updateTask(t.id, { approval: "approved" }, "Client approved this")}>
-                  Approve
+                <button className="btn sm" onClick={() => updateTask(t.id, { approval: "approved" }, tt("clients.actApproved"))}>
+                  {tt("share.approve")}
                 </button>
-                <button className="ghost sm" onClick={() => updateTask(t.id, { approval: "rejected" }, "Client requested changes")}>
-                  Request changes
+                <button className="ghost sm" onClick={() => updateTask(t.id, { approval: "rejected" }, tt("clients.actChanges"))}>
+                  {tt("clients.requestChanges")}
                 </button>
               </span>
             </div>
@@ -94,9 +97,9 @@ export default function SharedView() {
         <table className="tbl">
           <tbody>
             <tr>
-              <th>Task</th>
-              <th>Status</th>
-              <th>Due</th>
+              <th>{tt("board.colTask")}</th>
+              <th>{tt("common.status")}</th>
+              <th>{tt("board.colDue")}</th>
             </tr>
             {ts.map((t) => (
               <tr key={t.id} style={{ cursor: "default" }}>
