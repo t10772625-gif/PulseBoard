@@ -1550,3 +1550,550 @@ unless code, security controls, infrastructure, configuration and verification
 support that exact claim.
 
 Build PulseBoard as a trustworthy multi-tenant SaaS product, not a misleading demo.
+
+
+
+---
+
+# 27. Mandatory Daily Memory, Push Handoff and Session Continuity Protocol
+
+PulseBoard must maintain permanent repository-based engineering memory.
+
+Chat history, previous sessions, screenshots, verbal summaries, UI appearance, and
+agent memory are not sources of truth.
+
+The repository documentation is the only source of truth for:
+
+- Current implementation state
+- What changed
+- Why it changed
+- Previous behavior
+- Current behavior
+- Security decisions
+- RLS/API/storage state
+- Test evidence
+- Open issues
+- Known limitations
+- Required credentials/provider setup
+- Pending work
+- Regression risks
+- Rollback steps
+- Next-session instructions
+
+The required files are:
+
+```text
+docs/ENGINEERING_STATUS.md
+docs/ISSUE_REGISTER.md
+docs/VERIFICATION_LOG.md
+docs/SECURITY_DECISIONS.md
+
+docs/daily-memory/YYYY-MM-DD.md
+
+docs/handoffs/CURRENT_HANDOFF.md
+docs/handoffs/archive/YYYY-MM-DD-push-NNN.md
+```
+
+Do not create, modify, delete, archive or overwrite these files without explicit
+user approval if the current task has not approved documentation changes.
+
+When documentation updates are approved, these files are mandatory and must be kept
+consistent with the actual repository code, database migrations and test evidence.
+
+---
+
+## 27.1 New Session Mandatory Read Order
+
+At the start of every new Claude session, before proposing, implementing, auditing,
+claiming knowledge, or saying something is fixed, read in exactly this order:
+
+```text
+1. CLAUDE.md
+2. README.md
+3. docs/ENGINEERING_STATUS.md
+4. docs/handoffs/CURRENT_HANDOFF.md
+5. docs/ISSUE_REGISTER.md
+   - all open Critical issues
+   - all open High issues
+   - all open Medium issues relevant to requested work
+6. docs/VERIFICATION_LOG.md
+   - latest relevant change records
+7. docs/SECURITY_DECISIONS.md
+   - relevant decisions only
+8. Latest daily memory file in docs/daily-memory/
+```
+
+Then state briefly:
+
+```text
+- Current known product state
+- Relevant open risks/issues
+- Relevant pending or blocked work
+- Relevant limitations
+- Whether documentation is stale, missing, contradictory or incomplete
+- Whether the requested work conflicts with previous decisions
+```
+
+Never ask the user to repeat project history that is available in these files.
+
+Never say:
+
+```text
+I do not know what happened previously
+Please explain the old work again
+I assume the previous work is complete
+Previous chat said it was fixed
+I remember it was working
+```
+
+Read the repository memory first.
+
+---
+
+## 27.2 Daily Memory Rule
+
+Whenever the user says any of these:
+
+```text
+memory
+save memory
+daily memory
+today's memory
+aaj ki memory
+handoff
+save handoff
+push memory
+update docs
+end of day summary
+```
+
+create or update:
+
+```text
+docs/daily-memory/YYYY-MM-DD.md
+docs/handoffs/CURRENT_HANDOFF.md
+```
+
+The daily memory must record everything done that day, including:
+
+```text
+- What was requested
+- Why the work was requested
+- What existed before
+- Why the old implementation/state existed
+- What was changed
+- Why the new implementation/state is better or required
+- Exact files changed
+- Exact routes/components/hooks/utilities changed
+- Database migrations/tables/columns changed
+- RLS policies changed
+- Storage policies/buckets changed
+- API routes/server actions changed
+- Integrations/provider configurations affected
+- Roles and permissions affected
+- Feature tiers affected
+- Existing features that could regress
+- Tests run
+- Tests passed
+- Tests failed
+- Tests not run
+- Browser checks run/not run
+- Security checks run/not run
+- Known issues found
+- New issue IDs created
+- Existing issue IDs updated
+- What is pending
+- Why it is pending
+- What is blocked
+- What is required from user/provider
+- Exact next steps
+- Rollback plan
+```
+
+Never create a vague daily memory such as:
+
+```text
+Worked on roles.
+Fixed RLS.
+Updated UI.
+Everything looks good.
+```
+
+Daily memory must be factual, detailed, and evidence-based.
+
+---
+
+## 27.3 Push Handoff Rule
+
+Before every git push, or when the user says “push memory”, “handoff”, “commit
+summary”, “save current state”, or “prepare for next session”:
+
+1. Inspect the actual current diff/status.
+2. Compare current changes with:
+   - ENGINEERING_STATUS.md
+   - ISSUE_REGISTER.md
+   - VERIFICATION_LOG.md
+   - current daily memory file
+3. Identify undocumented changes, risks, mock behavior, untested paths and blockers.
+4. Update the approved documentation files.
+5. Create a new immutable handoff archive file:
+
+```text
+docs/handoffs/archive/YYYY-MM-DD-push-NNN.md
+```
+
+6. Replace/update:
+
+```text
+docs/handoffs/CURRENT_HANDOFF.md
+```
+
+7. Only then propose or perform git push if the user explicitly approved pushing.
+
+Never claim “ready to push” until the handoff accurately reflects the current code state.
+
+Never push automatically without explicit user approval.
+
+---
+
+## 27.4 Current Handoff Requirements
+
+`docs/handoffs/CURRENT_HANDOFF.md` must always describe the exact current state after
+the latest approved push or latest approved working session.
+
+It must contain:
+
+```text
+1. Handoff metadata
+   - Date/time
+   - Current branch
+   - Last known commit hash, if available
+   - Environment: local/dev/staging/production
+   - Current app state: mock/local-only/Supabase/partial/live
+
+2. Executive summary
+   - What changed most recently
+   - Whether it is verified
+   - What must not be assumed
+
+3. Current implementation truth
+   - Implemented and verified
+   - Implemented but unverified
+   - Demo/mock-only
+   - Setup required
+   - Not implemented
+
+4. Security and data state
+   - Auth state
+   - RLS state
+   - API authorization state
+   - Storage state
+   - Realtime state
+   - Secret/configuration status
+   - Known tenant-isolation risk, if any
+
+5. Open issues
+   - Critical/High/Medium issues
+   - Relevant issue IDs
+   - Exact next action
+
+6. Current blockers
+   - User action needed
+   - Provider action needed
+   - Missing domain/API key/OAuth app
+   - Missing test account
+   - Missing browser verification
+
+7. Verification status
+   - Tests actually run
+   - Browser checks actually run
+   - Tests not run
+   - Why not run
+
+8. Regression warnings
+   - Areas likely affected by next change
+   - Existing behavior that must be preserved
+
+9. Recommended next task
+   - Single safest next task
+   - Prerequisites
+   - Risks
+   - Approval required or not
+
+10. Do not do without approval
+   - migrations
+   - RLS changes
+   - package installs
+   - external API calls
+   - email sends
+   - production deployment
+   - destructive actions
+```
+
+A new session should be able to begin productive work by reading only:
+
+```text
+CLAUDE.md
+ENGINEERING_STATUS.md
+CURRENT_HANDOFF.md
+relevant open issues
+latest verification log
+```
+
+No user re-explanation should be needed.
+
+---
+
+## 27.5 Immutable Push Archive Rules
+
+Every push handoff archive file must include:
+
+```text
+- Push number for the day
+- Date/time
+- Branch
+- Commit message proposed or used
+- Files changed since previous push
+- Why each change was made
+- Previous behavior/state
+- New behavior/state
+- Security/RLS/API/storage impact
+- Tests and results
+- Untested areas
+- Open issues at time of push
+- New issues discovered
+- Deferred items
+- Exact rollback/revert guidance
+- Next session instructions
+```
+
+Push archive files are historical records.
+
+Never silently rewrite old archive files to make history look cleaner.
+
+If an old handoff was inaccurate, add a correction section:
+
+```md
+## Correction
+
+Previous statement:
+...
+
+Why it was inaccurate:
+...
+
+Correct current understanding:
+...
+
+Evidence:
+...
+```
+
+---
+
+## 27.6 Mandatory Before / Why / After Format
+
+For every meaningful change in a daily memory or handoff, document this exact pattern:
+
+```md
+### Change: [Name]
+
+**Before**
+- What existed before this work
+- What was missing, insecure, broken, mocked, unverified or limited
+- Why the previous state existed
+
+**Why change was needed**
+- User/business/security/technical reason
+- Specific risk or limitation addressed
+- Related issue ID(s)
+
+**What changed**
+- Exact implementation details
+- Exact files/tables/routes/policies changed
+- Role/tier/workspace impact
+
+**After**
+- What works now
+- What remains unverified
+- What is still missing
+- What user-visible behavior changed
+- What security behavior changed
+
+**Verification**
+- Tests run and actual results
+- Manual/browser verification
+- What was not tested
+
+**Regression risk**
+- Existing feature(s) that may be affected
+- What was done to preserve them
+
+**Rollback**
+- How to revert safely
+```
+
+---
+
+## 27.7 No Hidden Pending Work
+
+Every incomplete item must appear in at least one of:
+
+```text
+docs/ISSUE_REGISTER.md
+docs/ENGINEERING_STATUS.md
+docs/handoffs/CURRENT_HANDOFF.md
+```
+
+Pending work must include:
+
+```text
+- What is pending
+- Why it is pending
+- Severity/importance
+- What blocks it
+- What evidence is missing
+- Who/what is needed
+- What happens if it remains pending
+- Recommended next step
+```
+
+Never hide pending work because:
+
+```text
+- it is difficult
+- it requires credentials
+- it requires a paid provider
+- it requires browser testing
+- it was not in the latest request
+- it is low priority
+- it was discovered late
+- it might embarrass a previous completion claim
+```
+
+---
+
+## 27.8 No “All Done” Claim Rule
+
+If the user asks:
+
+```text
+kya sab solve ho gaya?
+koi issue nahi?
+ab 100% theek hai?
+sab secure hai?
+kuch baqi to nahi?
+```
+
+do not answer with a bare yes/no.
+
+First read:
+
+```text
+ENGINEERING_STATUS.md
+CURRENT_HANDOFF.md
+open ISSUE_REGISTER.md entries
+latest VERIFICATION_LOG.md
+```
+
+Then answer in this format:
+
+```md
+## Current Reality
+
+Production-ready: YES / NO
+
+## Verified Today
+
+- [Area]: exact evidence
+
+## Open Issues
+
+- [Issue ID] [Severity]: title — current status — next action
+
+## Untested / Unverified
+
+- [Area]: why it has not been verified
+
+## Setup Required
+
+- [Provider/domain/key/deployment]: what is still required
+
+## Demo / Mock / Local-only
+
+- [Feature]: exact limitation
+
+## Count
+
+- Critical: X
+- High: X
+- Medium: X
+- Low: X
+- Blocked: X
+- Unverified: X
+- Demo/mock-only: X
+
+## Honest Conclusion
+
+One evidence-based sentence only.
+```
+
+Never claim “everything is solved” unless:
+
+```text
+- all release gates pass
+- no Critical issues remain
+- no High issues remain
+- all security-critical paths are verified
+- all known issues are either verified fixed or explicitly accepted by the user
+- all required configuration is live and tested
+- the release checklist is recorded
+```
+
+---
+
+## 27.9 Documentation Consistency Rule
+
+Before finalizing a task, check that these files do not contradict each other:
+
+```text
+ENGINEERING_STATUS.md
+ISSUE_REGISTER.md
+VERIFICATION_LOG.md
+CURRENT_HANDOFF.md
+latest daily memory file
+```
+
+If there is a contradiction:
+
+1. Do not hide it.
+2. State it clearly.
+3. Create or update an issue.
+4. Correct the newest/current truth document.
+5. Add correction notes to historical records instead of rewriting history silently.
+
+---
+
+## 27.10 Handoff Quality Gate
+
+A handoff is incomplete if it does not answer all these questions:
+
+```text
+1. What exactly changed?
+2. Why did it change?
+3. What existed before?
+4. What exists now?
+5. Which files/tables/routes/policies changed?
+6. What security impact exists?
+7. What tests actually ran?
+8. What did not get tested?
+9. What is still pending?
+10. Why is it pending?
+11. What can break next?
+12. What must the next session do first?
+13. What must not be changed without approval?
+14. What rollback is available?
+15. Is the app actually ready for production? Why or why not?
+```
+
+If any answer is missing, do not call the handoff complete.

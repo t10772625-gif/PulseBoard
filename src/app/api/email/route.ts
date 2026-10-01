@@ -11,6 +11,8 @@ import { getServerSupabase } from "@/lib/supabase/server";
 // in email_outbox.
 
 const MAX_PER_HOUR = 50;
+// Safe message for the browser; raw DB/provider errors only go to the server log / email_outbox
+const GENERIC_ERROR = "Operation could not be completed";
 
 type Body = { workspaceId: string; toUserId: string; subject: string; text: string; template?: string; taskUrl?: string };
 
@@ -46,8 +48,13 @@ export async function POST(req: Request) {
 
   // Rate limit per sender
   const since = new Date(Date.now() - 3600_000).toISOString();
-  const { count } = await sb.from("email_outbox").select("id", { count: "exact", head: true }).eq("created_by", user.id).gte("created_at", since);
-  if ((count ?? 0) >= MAX_PER_HOUR) return NextResponse.json({ error: "Email limit reached, try again later" }, { status: 429 });
+  const { count, error: countErr } = await sb.from("email_outbox").select("id", { count: "exact", head: true }).eq("created_by", user.id).gte("created_at", since);
+  // Fail closed: if the count can't be read, don't send (otherwise the limit is silently skipped)
+  if (countErr || count === null) {
+    console.error("[api/email] rate-limit count failed", { userId: user.id, code: countErr?.code });
+    return NextResponse.json({ error: GENERIC_ERROR }, { status: 500 });
+  }
+  if (count >= MAX_PER_HOUR) return NextResponse.json({ error: "Email limit reached, try again later" }, { status: 429 });
 
   // Queue first (RLS: sender must be able to edit in this workspace)
   const { data: queued, error: qErr } = await sb
@@ -55,26 +62,41 @@ export async function POST(req: Request) {
     .insert({ workspace_id: body.workspaceId, to_user_id: body.toUserId, to_email: profile.email, subject, template: body.template ?? "notification", created_by: user.id })
     .select("id")
     .single();
-  if (qErr || !queued) return NextResponse.json({ error: qErr?.message ?? "Could not queue email" }, { status: 403 });
+  if (qErr || !queued) {
+    // Usually RLS (sender can't edit in this workspace); details stay in the server log
+    console.error("[api/email] queue insert failed", { userId: user.id, workspaceId: body.workspaceId, code: qErr?.code });
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const link = body.taskUrl && /^https?:\/\//.test(body.taskUrl) ? `<p><a href="${escapeHtml(body.taskUrl)}">Open in PulseBoard</a></p>` : "";
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from,
-      to: [profile.email],
-      subject,
-      text,
-      html: `<p>Hi ${escapeHtml(profile.full_name || "there")},</p><p>${escapeHtml(text)}</p>${link}<p style="color:#63788b;font-size:12px">You're receiving this because you're a member of a PulseBoard workspace.</p>`,
-    }),
-  });
+  let res: Response;
+  try {
+    res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from,
+        to: [profile.email],
+        subject,
+        text,
+        html: `<p>Hi ${escapeHtml(profile.full_name || "there")},</p><p>${escapeHtml(text)}</p>${link}<p style="color:#63788b;font-size:12px">You're receiving this because you're a member of a PulseBoard workspace.</p>`,
+      }),
+    });
+  } catch {
+    console.error("[api/email] provider unreachable", { outboxId: queued.id });
+    await sb.from("email_outbox").update({ status: "failed", error: "Provider unreachable" }).eq("id", queued.id);
+    return NextResponse.json({ error: GENERIC_ERROR }, { status: 502 });
+  }
   const out = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
   await sb
     .from("email_outbox")
     .update({ status: res.ok ? "sent" : "failed", provider_id: out.id ?? null, error: res.ok ? null : out.message ?? `HTTP ${res.status}` })
     .eq("id", queued.id);
 
-  if (!res.ok) return NextResponse.json({ error: out.message ?? "Email provider error" }, { status: 502 });
+  if (!res.ok) {
+    // Provider message is kept in email_outbox.error (visible to the sender and admins), not returned raw
+    console.error("[api/email] provider rejected email", { outboxId: queued.id, status: res.status });
+    return NextResponse.json({ error: GENERIC_ERROR }, { status: 502 });
+  }
   return NextResponse.json({ ok: true, id: out.id });
 }
