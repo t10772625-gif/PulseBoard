@@ -18,14 +18,16 @@ export function pricePerUser(p: Plan): number {
 type Props = {
   seats: number;
   // Public page: every card links to sign-up. Settings: shows the current plan
-  // and (demo only) lets the Owner switch.
+  // and lets the Owner switch (demo: local; real mode: saved via test_set_plan).
   mode: "public" | "settings";
   current?: Plan;
   canSwitch?: boolean;
   onSwitch?: (p: Plan) => void;
+  // Real mode: the switch is saved to the database (test switch until Stripe)
+  testMode?: boolean;
 };
 
-export default function PlanCards({ seats, mode, current, canSwitch, onSwitch }: Props) {
+export default function PlanCards({ seats, mode, current, canSwitch, onSwitch, testMode }: Props) {
   const { t, fmt } = useT();
   return (
     <div className="pr-cards">
@@ -68,8 +70,13 @@ export default function PlanCards({ seats, mode, current, canSwitch, onSwitch }:
               ) : isCurrent ? (
                 <span className="pr-cta pr-cta-current">{t("pricing.currentPlan")}</span>
               ) : (
-                <button className="pr-cta" disabled={!canSwitch} onClick={() => onSwitch?.(p)} title={canSwitch ? t("pricing.switchTitleOk") : t("pricing.switchTitleNo")}>
-                  {t("pricing.switchDemo", { plan: name })}
+                <button
+                  className={`pr-cta ${p === "legendary" ? "pr-cta-strong" : ""}`}
+                  disabled={!canSwitch}
+                  onClick={() => onSwitch?.(p)}
+                  title={canSwitch ? t("pricing.switchTitleOk") : t("pricing.switchTitleNo")}
+                >
+                  {testMode ? t("pricing.switchTest", { plan: name }) : t("pricing.switchDemo", { plan: name })}
                 </button>
               )}
             </div>

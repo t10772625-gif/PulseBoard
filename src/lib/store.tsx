@@ -212,6 +212,9 @@ type Store = {
   // Plan & gating
   plan: Plan;
   setPlan: (p: Plan) => void;
+  // Owner-only plan change: local in demo mode, saved to the database in real mode
+  // (test switch until Stripe billing exists; no payment is taken)
+  changePlan: (p: Plan) => Promise<boolean>;
   can: (featureId: string) => boolean;
   aiUses: number;
   spendAi: () => boolean;
@@ -689,6 +692,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       action ? 5000 : 2200
     );
   }, []);
+
+  const changePlan = useCallback(
+    async (p: Plan) => {
+      const db = dbRef.current;
+      if (!db) {
+        setPlan(p);
+        return true;
+      }
+      try {
+        await db.setPlan(p);
+        setPlan(p);
+        toast(tr("planPage.switched", { plan: tr(`plan.${p}`) }));
+        return true;
+      } catch (e) {
+        // Raw database text stays in the console; the user gets a clear reason
+        console.error("[plan]", e);
+        const msg = e instanceof Error ? e.message : "";
+        toast(
+          /turned off/i.test(msg)
+            ? tr("planPage.switchOff")
+            : /owner/i.test(msg)
+              ? tr("planPage.switchOwner")
+              : /function|schema cache/i.test(msg)
+                ? tr("planPage.switchMissing")
+                : tr("store.saveFailed")
+        );
+        return false;
+      }
+    },
+    [toast]
+  );
 
   const logActivity = useCallback((taskId: string, message: string) => {
     setActivity((a) => ({
@@ -1605,6 +1639,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         survey,
         plan,
         setPlan,
+        changePlan,
         can,
         aiUses,
         spendAi,

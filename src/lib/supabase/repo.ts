@@ -396,6 +396,9 @@ export function repo(ctx: DbCtx) {
     // Own profile: only the display name is writable (column grant + RLS "update self")
     updateMyName: (name: string) => run(sb.from("profiles").update({ full_name: name }).eq("id", uid)),
     revokeInvite: (id: string) => run(sb.from("workspace_invites").update({ revoked_at: new Date().toISOString() }).eq("id", id)),
+    // Test plan switch until Stripe exists: the database function checks Owner +
+    // the server-wide switch and writes an audit event (migration 19_test-plan-switch)
+    setPlan: (plan: Plan) => run(sb.rpc("test_set_plan", { ws, new_plan: plan })),
   };
 }
 

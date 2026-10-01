@@ -7,6 +7,7 @@ import SettingsHeader from "@/components/SettingsHeader";
 import CompareTable from "@/components/pricing/CompareTable";
 import PlanCards from "@/components/pricing/PlanCards";
 import { useT } from "@/i18n/I18nProvider";
+import { Plan } from "@/types";
 
 function UsageTile({ label, value, limit, pct }: { label: string; value: string; limit: string; pct: number }) {
   return (
@@ -31,8 +32,13 @@ export default function PlanSettings() {
   };
   const limits = PLANS[s.plan];
   const overBoards = counts.boards > limits.boards;
-  // Same rule as before the redesign: only the Owner, and only in demo mode
-  const canSwitch = s.myRole === "Owner" && !s.realMode;
+  // Only the Owner may switch. Real mode saves it through the test_set_plan database
+  // function (Owner + server switch checked there too); no payment is taken.
+  const canSwitch = s.myRole === "Owner";
+  const switchPlan = (p: Plan) => {
+    if (s.realMode && !window.confirm(t("planPage.confirmSwitch", { plan: t(`plan.${p}`) }))) return;
+    void s.changePlan(p);
+  };
 
   return (
     <div className="pr-embedded">
@@ -49,11 +55,11 @@ export default function PlanSettings() {
       <section className="card st-plans" aria-labelledby="st-plans-h">
         <h2 id="st-plans-h">{t("planPage.choose")}</h2>
         <p className="mute st-foot" style={{ marginTop: 0 }}>
-          <Info size={14} aria-hidden /> {t("planPage.billingOff")} {s.realMode ? t("planPage.realNoChange") : t("planPage.demoSwitch")}
+          <Info size={14} aria-hidden /> {t("planPage.billingOff")} {s.realMode ? t("planPage.testSwitchNote") : t("planPage.demoSwitch")}
         </p>
 
         <div className="st-plan-cards">
-          <PlanCards seats={Math.max(1, counts.members)} mode="settings" current={s.plan} canSwitch={canSwitch} onSwitch={s.setPlan} />
+          <PlanCards seats={Math.max(1, counts.members)} mode="settings" current={s.plan} canSwitch={canSwitch} onSwitch={switchPlan} testMode={s.realMode} />
         </div>
 
         <div className="st-usage-grid" aria-label={t("planPage.usage")}>

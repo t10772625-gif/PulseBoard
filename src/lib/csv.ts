@@ -1,11 +1,20 @@
 // Minimal RFC 4180 CSV helpers (CORE-08 / CORE-09). No dependency needed.
 
+// Spreadsheet formula injection guard (CLAUDE.md §13): a text cell starting with
+// = + - @ (or tab / carriage return) would run as a formula in Excel / Sheets, so it
+// gets a leading apostrophe. Real numbers are left alone so -5 stays a number.
+export function safeCell(cell: string | number): string {
+  if (typeof cell === "number") return String(cell);
+  const s = String(cell ?? "");
+  return /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+}
+
 export function toCsv(rows: (string | number)[][]): string {
   return rows
     .map((r) =>
       r
         .map((cell) => {
-          const s = String(cell ?? "");
+          const s = safeCell(cell);
           return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
         })
         .join(",")

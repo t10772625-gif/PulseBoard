@@ -20,16 +20,26 @@ type Body = { workspaceId: string; toUserId: string; subject: string; text: stri
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-export async function POST(req: Request) {
-  const sb = await getServerSupabase();
-  if (!sb) return NextResponse.json({ error: "Supabase is not configured" }, { status: 503 });
-  const key = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM;
-  if (!key || !from) return NextResponse.json({ error: "Email is not configured (RESEND_API_KEY / EMAIL_FROM)" }, { status: 503 });
+const isStr = (v: unknown, max: number): v is string => typeof v === "string" && v.length <= max;
 
+export async function POST(req: Request) {
+  // CSRF defence in depth: a browser always sends Origin on cross-site POSTs, so a
+  // request from another site is refused before cookies are used.
+  const origin = req.headers.get("origin");
+  if (origin && origin !== new URL(req.url).origin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const sb = await getServerSupabase();
+  if (!sb) return NextResponse.json({ error: "Unavailable" }, { status: 503 });
+
+  // Sign-in first, so signed-out callers learn nothing about the server's setup
   const { data: auth } = await sb.auth.getUser();
   const user = auth.user;
-  if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const key = process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM;
+  // 503 tells the app "email not set up" (it then skips quietly); variable names stay in this file only
+  if (!key || !from) return NextResponse.json({ error: "Email is not configured" }, { status: 503 });
 
   let body: Body;
   try {
@@ -37,6 +47,19 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
+  // Shape check (Zod isn't installed; see DEP-ZOD-001): only plain strings of bounded size
+  if (
+    !body ||
+    typeof body !== "object" ||
+    !isStr(body.workspaceId, 64) ||
+    !isStr(body.toUserId, 64) ||
+    !isStr(body.subject, 1000) ||
+    !isStr(body.text, 20000) ||
+    (body.template !== undefined && !isStr(body.template, 64)) ||
+    (body.taskUrl !== undefined && !isStr(body.taskUrl, 2048)) ||
+    (body.locale !== undefined && !isStr(body.locale, 16))
+  )
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   const subject = String(body.subject ?? "").slice(0, 200).trim();
   const text = String(body.text ?? "").slice(0, 5000).trim();
   if (!body.workspaceId || !body.toUserId || !subject || !text) return NextResponse.json({ error: "Missing fields" }, { status: 400 });

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "i18n:check": "node scripts/i18n-check.mjs",
-    "i18n:test": "node --experimental-strip-types scripts/i18n-icu-test.mts"
+    "i18n:test": "node --experimental-strip-types scripts/i18n-icu-test.mts",
+    "test:csv": "node --experimental-strip-types scripts/csv-safety-test.mts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

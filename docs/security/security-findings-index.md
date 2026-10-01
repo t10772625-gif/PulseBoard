@@ -9,6 +9,7 @@ migration or source files; these docs link to them instead of copying them.
 
 | Date | Report | Scope | Status |
 | ---- | ------ | ----- | ------ |
+| 2026-10-01 | [Full application audit](./2026-10-01-full-app-audit.md) | Whole app: DB advisors, auth, API, XSS, CSV, headers, realtime, secrets, dependencies, feature gates | IMPLEMENTED, NOT YET VERIFIED — A-01…A-05 fixed on `fixes-v1` (tests / curl verified); B-01…B-12 open, need approval or setup |
 | 2026-10-01 | [DB security hardening (RLS audit)](./2026-10-01-rls-audit.md) | Supabase RLS, grants and functions on all 16 public tables + storage; `/api/email` | IMPLEMENTED, NOT YET VERIFIED — `…1800`–`…1890` applied and DB-verified (incl. regression fix F-14); browser / two-account tests pending |
 
 ## Open items (across reports)
