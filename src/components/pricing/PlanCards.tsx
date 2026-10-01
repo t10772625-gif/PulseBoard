@@ -6,8 +6,8 @@ import { PLAN_PITCH } from "@/lib/pricing";
 import { useT } from "@/i18n/I18nProvider";
 import { Plan } from "@/types";
 
-const ICON = { free: Sprout, pro: Rocket, legendary: Crown } as const;
-export const PLAN_ORDER: Plan[] = ["free", "pro", "legendary"];
+const ICON = { basic: Sprout, pro: Rocket, enterprise: Crown } as const;
+export const PLAN_ORDER: Plan[] = ["basic", "pro", "enterprise"];
 
 // Per-user monthly price in USD, read from PLANS so the price lives in one place
 export function pricePerUser(p: Plan): number {
@@ -39,7 +39,7 @@ export default function PlanCards({ seats, mode, current, canSwitch, onSwitch, t
         const name = t(`plan.${p}`);
         return (
           <article key={p} className={`pr-card pr-${p} ${isCurrent ? "pr-current" : ""}`} aria-labelledby={`pr-${p}-name`}>
-            {p === "legendary" && <span className="pr-glow" aria-hidden />}
+            {p === "enterprise" && <span className="pr-glow" aria-hidden />}
             <div className="pr-card-in">
               <header className="pr-card-head">
                 <span className="pr-icon" aria-hidden>
@@ -64,14 +64,14 @@ export default function PlanCards({ seats, mode, current, canSwitch, onSwitch, t
                 ))}
               </ul>
               {mode === "public" ? (
-                <Link className={`pr-cta ${p === "free" ? "" : "pr-cta-strong"}`} href="/register">
-                  {p === "free" ? t("pricing.startFree") : t("pricing.startFreeLater", { plan: name })}
+                <Link className={`pr-cta ${p === "basic" ? "" : "pr-cta-strong"}`} href="/register">
+                  {p === "basic" ? t("pricing.startFree") : t("pricing.startFreeLater", { plan: name })}
                 </Link>
               ) : isCurrent ? (
                 <span className="pr-cta pr-cta-current">{t("pricing.currentPlan")}</span>
               ) : (
                 <button
-                  className={`pr-cta ${p === "legendary" ? "pr-cta-strong" : ""}`}
+                  className={`pr-cta ${p === "enterprise" ? "pr-cta-strong" : ""}`}
                   disabled={!canSwitch}
                   onClick={() => onSwitch?.(p)}
                   title={canSwitch ? t("pricing.switchTitleOk") : t("pricing.switchTitleNo")}

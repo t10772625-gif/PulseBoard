@@ -34,6 +34,6 @@ export default function Gate({ id, children, compact }: { id: string; children: 
 export function PlanTag({ id }: { id: string }) {
   const { t } = useT();
   const need = requiredPlan(id);
-  if (need === "free") return null;
+  if (need === "basic") return null;
   return <span className={`plan-tag ${need}`}>{t(`plan.${need}`)}</span>;
 }

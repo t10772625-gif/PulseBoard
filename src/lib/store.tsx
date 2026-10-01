@@ -382,7 +382,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [archived, setArchived] = useState<Task[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [capacity, setCapacityState] = useState<Record<MemberId, number>>(DEMO ? DEFAULT_CAPACITY : {});
-  const [plan, setPlan] = useState<Plan>(DEMO ? "legendary" : "free");
+  const [plan, setPlan] = useState<Plan>(DEMO ? "enterprise" : "basic");
   const [aiUses, setAiUses] = useState(0);
   const [customFields, setCustomFields] = useState<CustomFieldDef[]>([
     { id: "cf-client", name: "Client", type: "text" },
@@ -549,7 +549,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setSelectedIds([]);
     setOpenTaskId(null);
     setPermissions(DEFAULT_PERMISSIONS);
-    setPlan("free");
+    setPlan("basic");
     setWorkspaceName("");
     setMyEmail("");
   }, []);
@@ -1322,7 +1322,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const spendAi = useCallback(() => {
     const cap = PLANS[plan].aiPerMonth;
     if (aiUses >= cap) {
-      toast(plan === "free" ? tr("store.aiNeedsPro") : tr("store.aiLimit"));
+      toast(plan === "basic" ? tr("store.aiNeedsPro") : tr("store.aiLimit"));
       return false;
     }
     setAiUses((n) => n + 1);

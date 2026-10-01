@@ -545,7 +545,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
             disabled={locked || !can("TIME-07")}
             onChange={(v) => updateTask(taskId, { energy: v || undefined })}
             options={[
-              { value: "", label: can("TIME-07") ? tt("drawer.notSet") : `🔒 ${tt("plan.legendary")}` },
+              { value: "", label: can("TIME-07") ? tt("drawer.notSet") : `🔒 ${tt("plan.enterprise")}` },
               { value: "high", label: tt("drawer.energyHigh") },
               { value: "low", label: tt("drawer.energyLow") },
             ]}

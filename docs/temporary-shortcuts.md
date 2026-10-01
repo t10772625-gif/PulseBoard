@@ -16,7 +16,7 @@ Status: 🔴 must replace before launch · 🟠 replace before paid / public use
 | | |
 | - | - |
 | **What it is now** | Settings → Plan & billing → "Switch to … (test)". The workspace Owner changes the plan for free; saved to the DB. |
-| **Where** | DB: `app_settings` row `test_plan_switch`, function `test_set_plan(ws, plan)` (migration `19_test-plan-switch`). Code: `repo.setPlan` (`src/lib/supabase/repo.ts`), `changePlan` (`src/lib/store.tsx`), `switchPlan` (`src/app/(app)/settings/plan/page.tsx`), `testMode` in `PlanCards.tsx`, keys `planPage.testSwitchNote`, `pricing.switchTest`, `planPage.switch*`. |
+| **Where** | DB: `app_settings` row `test_plan_switch`, function `test_set_plan(ws, plan)` (plans are now `basic` / `pro` / `enterprise`) (migration `19_test-plan-switch`). Code: `repo.setPlan` (`src/lib/supabase/repo.ts`), `changePlan` (`src/lib/store.tsx`), `switchPlan` (`src/app/(app)/settings/plan/page.tsx`), `testMode` in `PlanCards.tsx`, keys `planPage.testSwitchNote`, `pricing.switchTest`, `planPage.switch*`. |
 | **Why now** | No billing provider yet; the user needs to try Pro / Legendary features. |
 | **Risk if left** | Anyone who owns a workspace gets paid plans for free (breaks CLAUDE.md §8). |
 | **Replace with** | Stripe: Checkout / Customer Portal from a **server route**; plan set **only** by a verified Stripe webhook (signature check, idempotent event IDs stored, service role used only inside that route); define cancel / failed payment / downgrade / seat rules; Plan page buttons open Checkout. |
@@ -101,6 +101,13 @@ Status: 🔴 must replace before launch · 🟠 replace before paid / public use
 | - | - |
 | **What** | `supabase/run-all-migrations.sql` was a generated bundle (should already be deleted; not in git). Migrations are run by hand in the SQL editor. |
 | **Replace with** | Supabase CLI migrations (`db push`) in CI before launch (files would need flattening — see `supabase/migrations/README.md`). |
+
+### 12. 🟡 Old plan labels still accepted in the app
+
+| | |
+| - | - |
+| **What it is now** | `toPlan()` in `src/lib/plans.ts` maps the old database labels `free` → `basic` and `legendary` → `enterprise`, so the app works before and after migration `20_rename-plan-tiers` runs. Unknown values fall back to Basic. |
+| **Replace with** | Nothing needed once migration 20 has run on every database; the mapping can then be deleted (keep `toPlan()` as the safe fallback). |
 
 ## Accepted (not shortcuts, but keep honest)
 

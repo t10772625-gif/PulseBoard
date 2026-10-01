@@ -777,9 +777,9 @@ Rules:
 Current intended plans:
 
 ```text
-Free: $0
+Basic: $0
 Pro: $12 per user/month
-Legendary: $18 per user/month
+Enterprise: $18 per user/month
 ```
 
 Billing and feature access must be server-controlled.

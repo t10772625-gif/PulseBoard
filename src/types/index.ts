@@ -57,7 +57,7 @@ export type Task = {
   completedDaysAgo?: number;
 };
 
-export type Plan = "free" | "pro" | "legendary";
+export type Plan = "basic" | "pro" | "enterprise";
 
 export type CustomFieldDef = { id: string; name: string; type: "text" | "number" | "select"; options?: string[] };
 

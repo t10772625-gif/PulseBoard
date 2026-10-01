@@ -1727,7 +1727,7 @@ label.inline input:not([type="checkbox"]):not([type="radio"]) {
   background: var(--soft);
   color: var(--acc2);
 }
-.plan-tag.legendary {
+.plan-tag.enterprise {
   background: #efe7ff;
   color: #6c3fd1;
 }
@@ -2498,13 +2498,13 @@ label.inline input:not([type="checkbox"]):not([type="radio"]) {
 .pr-pro {
   background: linear-gradient(160deg, var(--acc), rgba(18, 181, 160, 0.25));
 }
-/* Legendary: dark card with a slowly turning gradient border and glow */
-.pr-legendary {
+/* Enterprise: dark card with a slowly turning gradient border and glow */
+.pr-enterprise {
   padding: 2px;
   background: conic-gradient(from var(--pr-angle, 0deg), var(--acc), var(--pr-violet), var(--pr-gold), var(--acc));
   animation: pr-spin 8s linear infinite;
 }
-.pr-legendary .pr-card-in {
+.pr-enterprise .pr-card-in {
   background:
     radial-gradient(420px 220px at 100% 0%, rgba(124, 108, 255, 0.22), transparent 70%),
     radial-gradient(360px 200px at 0% 100%, rgba(18, 181, 160, 0.18), transparent 70%),
@@ -2512,40 +2512,40 @@ label.inline input:not([type="checkbox"]):not([type="radio"]) {
   color: #eef5fa;
   border-radius: 22px;
 }
-.pr-legendary .pr-tag,
-.pr-legendary .pr-price span {
+.pr-enterprise .pr-tag,
+.pr-enterprise .pr-price span {
   color: #a9bccb;
 }
-.pr-legendary .pr-icon {
+.pr-enterprise .pr-icon {
   background: linear-gradient(135deg, var(--pr-gold), #ff9f5a);
   color: #2b1600;
 }
-.pr-legendary .pr-badge {
+.pr-enterprise .pr-badge {
   background: linear-gradient(90deg, var(--pr-gold), #ffb36b);
   color: #2b1600;
 }
-.pr-legendary .pr-price b {
+.pr-enterprise .pr-price b {
   background: linear-gradient(90deg, #fff, var(--pr-gold));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
-.pr-legendary .pr-total,
-.pr-legendary .pr-list svg {
+.pr-enterprise .pr-total,
+.pr-enterprise .pr-list svg {
   color: var(--pr-gold);
 }
-.pr-legendary .pr-cta {
+.pr-enterprise .pr-cta {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.18);
   color: #fff;
 }
-.pr-legendary .pr-cta-strong {
+.pr-enterprise .pr-cta-strong {
   background: linear-gradient(135deg, var(--pr-gold), #ff9f5a);
   color: #2b1600;
   border: 0;
   box-shadow: 0 10px 28px rgba(245, 195, 91, 0.35);
 }
-.pr-legendary .pr-cta-strong:hover:not(:disabled) {
+.pr-enterprise .pr-cta-strong:hover:not(:disabled) {
   color: #2b1600;
 }
 .pr-glow {
@@ -2569,7 +2569,7 @@ label.inline input:not([type="checkbox"]):not([type="radio"]) {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pr-legendary,
+  .pr-enterprise,
   .pr-glow {
     animation: none;
   }
@@ -2650,7 +2650,7 @@ label.inline input:not([type="checkbox"]):not([type="radio"]) {
 .pr-table thead th:not(:first-child) {
   text-align: center;
 }
-.pr-table thead .pr-col-legendary {
+.pr-table thead .pr-col-enterprise {
   color: #b7860f;
 }
 .pr-table tbody th {
@@ -2671,7 +2671,7 @@ label.inline input:not([type="checkbox"]):not([type="radio"]) {
   color: var(--mute);
   font-size: 12px;
 }
-.pr-table td.pr-col-legendary {
+.pr-table td.pr-col-enterprise {
   background: rgba(245, 195, 91, 0.07);
 }
 .pr-group th {
@@ -2720,7 +2720,7 @@ label.inline input:not([type="checkbox"]):not([type="radio"]) {
   :root:not([data-theme="light"]) .pr-st-preview {
     color: #f6c453;
   }
-  :root:not([data-theme="light"]) .pr-table thead .pr-col-legendary {
+  :root:not([data-theme="light"]) .pr-table thead .pr-col-enterprise {
     color: #f5c35b;
   }
   :root:not([data-theme="light"]) .pr-st-app {
@@ -2730,7 +2730,7 @@ label.inline input:not([type="checkbox"]):not([type="radio"]) {
 :root[data-theme="dark"] .pr-st-preview {
   color: #f6c453;
 }
-:root[data-theme="dark"] .pr-table thead .pr-col-legendary {
+:root[data-theme="dark"] .pr-table thead .pr-col-enterprise {
   color: #f5c35b;
 }
 :root[data-theme="dark"] .pr-st-app {

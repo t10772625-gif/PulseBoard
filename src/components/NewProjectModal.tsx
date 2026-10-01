@@ -21,7 +21,7 @@ export default function NewProjectModal() {
     e.preventDefault();
     const v = name.trim();
     if (!v) return toast(tt("newProject.enterName"));
-    // Plan limit: Free allows 1 project
+    // Plan limit: Basic allows 1 project
     if (Object.keys(projects).length >= PLANS[plan].boards) return toast(tt("newProject.limit", { plan: tt(`plan.${plan}`), n: PLANS[plan].boards }));
     const { color, gradient } = PROJECT_COLOR_PRESETS[preset];
     const id = addProject(v, description.trim(), color, gradient);

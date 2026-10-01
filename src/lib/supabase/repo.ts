@@ -6,6 +6,7 @@ import { Attachment, AutomationRule, Client, Comment, Member, MemberId, Notifica
 import { TODAY } from "../mock-data";
 import { getActiveLocale, tr } from "@/i18n";
 import { DEFAULT_PERMISSIONS, type PermissionKey, type PermissionMatrix, type Role } from "../permissions";
+import { toPlan } from "../plans";
 
 export type DbCtx = { sb: SupabaseClient; ws: string; uid: string };
 export type ColumnRow = [string, string, number];
@@ -153,7 +154,7 @@ export async function loadWorkspace(sb: SupabaseClient): Promise<Loaded | null> 
   if (!uid) return null;
 
   const mine = check(await sb.from("workspace_members").select("workspace_id, workspaces(name, plan)").eq("user_id", uid).limit(1));
-  const first = mine?.[0] as unknown as { workspace_id: string; workspaces: { name: string; plan: Plan } } | undefined;
+  const first = mine?.[0] as unknown as { workspace_id: string; workspaces: { name: string; plan: string } } | undefined;
   if (!first) throw new Error("No workspace found for this account.");
   const ctx: DbCtx = { sb, ws: first.workspace_id, uid };
 
@@ -274,7 +275,7 @@ export async function loadWorkspace(sb: SupabaseClient): Promise<Loaded | null> 
   return {
     ctx,
     workspaceName: first.workspaces.name,
-    plan: first.workspaces.plan,
+    plan: toPlan(first.workspaces.plan),
     meName: members.me?.name ?? "You",
     meEmail: auth.user?.email ?? "",
     members,

@@ -21,7 +21,7 @@ export default function Topbar() {
   // Voice → task (AI-07). Uses the browser's built-in speech recognition, so it
   // works in Chrome/Edge/Safari; other browsers get a message instead.
   function voice() {
-    if (!can("AI-07")) return toast(t("voice.legendaryOnly"));
+    if (!can("AI-07")) return toast(t("voice.enterpriseOnly"));
     if (!allowed("task.create")) return toast(t("voice.noCreate"));
     const w = window as unknown as { SpeechRecognition?: new () => Recognition; webkitSpeechRecognition?: new () => Recognition };
     const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;

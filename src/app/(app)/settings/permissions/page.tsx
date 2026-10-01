@@ -114,7 +114,7 @@ export default function PermissionsPage() {
           <span>
             {t("permPage.editingNeeds")}{" "}
             <Gate id="SEC-05" compact>
-              <b>{t("plan.legendary")}</b>
+              <b>{t("plan.enterprise")}</b>
             </Gate>{" "}
             {t("permPage.editingNeedsEnd")}
           </span>

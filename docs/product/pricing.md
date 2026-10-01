@@ -7,6 +7,12 @@ estimates, revenue projections, and go-to-market plan.
 Features are referenced by their IDs from [feature-audit.md](./feature-audit.md)
 (e.g. `AI-01` = Smart Matching).
 
+> **Renamed 2026-10-01 (current names):** Free → **Basic**, Pro stays **Pro**, Legendary → **Enterprise**.
+> Prices, limits and features did not change (Basic $0, Pro $12, Enterprise $18 per user/month).
+> "Free" / "Legendary" below are the old names. The separate "$50 / custom Enterprise" option
+> discussed further down was **not** adopted. Code: `src/lib/plans.ts`; database: migration
+> `20_rename-plan-tiers`.
+>
 > **Decision (final):** Option 2 prices with **no Enterprise tier**.
 >
 > | Tier | Price | Includes | Limits |

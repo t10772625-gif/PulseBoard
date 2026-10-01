@@ -63,13 +63,13 @@ export default function CompareTable() {
                   {r.note && <small>{t(r.note)}</small>}
                 </th>
                 <td>
-                  <CellView v={r.free} />
+                  <CellView v={r.basic} />
                 </td>
                 <td>
                   <CellView v={r.pro} />
                 </td>
-                <td className="pr-col-legendary">
-                  <CellView v={r.legendary} />
+                <td className="pr-col-enterprise">
+                  <CellView v={r.enterprise} />
                 </td>
                 <td>
                   <StatusChip s={r.status} />
