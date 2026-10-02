@@ -1,5 +1,5 @@
 "use client";
-import { CSSProperties, ReactNode, useEffect, useRef, useState } from "react";
+import { CSSProperties, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export type DropdownOption<T extends string> = { value: T; label: ReactNode };
 
@@ -22,7 +22,17 @@ export default function Dropdown<T extends string>({
   inline?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  // Open upwards when there isn't room below the trigger (e.g. near the bottom of the
+  // screen), so the list doesn't stretch the page or fall off the screen
+  const [up, setUp] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!open || inline || !ref.current || !menuRef.current) return;
+    const r = ref.current.getBoundingClientRect();
+    const h = menuRef.current.offsetHeight + 8;
+    setUp(window.innerHeight - r.bottom < h && r.top > window.innerHeight - r.bottom);
+  }, [open, inline]);
   const current = options.find((o) => o.value === value);
 
   useEffect(() => {
@@ -54,7 +64,7 @@ export default function Dropdown<T extends string>({
         {!disabled && <span className="ddown-caret">▾</span>}
       </button>
       {open && !disabled && (
-        <div className={inline ? "ddown-menu inline" : "ddown-menu"} role="listbox">
+        <div ref={menuRef} className={inline ? "ddown-menu inline" : up ? "ddown-menu up" : "ddown-menu"} role="listbox">
           {options.map((o) => (
             <button
               type="button"

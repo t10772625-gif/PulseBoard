@@ -39,16 +39,26 @@ export function SettingRow({ title, hint, children }: { title: React.ReactNode; 
 }
 
 // Shown when a list has nothing to show yet (new workspace, filters, missing item)
-export function EmptyState({ title, message, action }: { title: string; message?: string; action?: ReactNode }) {
+// Designed "nothing here yet" card, in the same language as the workspace loader:
+// a soft pulsing badge with an icon, a title, a hint and an optional action.
+export function EmptyState({ title, message, action, icon, compact }: { title: string; message?: string; action?: ReactNode; icon?: ReactNode; compact?: boolean }) {
   return (
-    <div className="empty-state" role="status">
-      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M22 12h-6l-2 3h-4l-2-3H2" />
-        <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
-      </svg>
+    <div className={`empty-state${compact ? " compact" : ""}`} role="status">
+      <span className="es-badge" aria-hidden="true">
+        <span className="es-ring" />
+        <span className="es-ring r2" />
+        <span className="es-icon">
+          {icon ?? (
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+              <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+            </svg>
+          )}
+        </span>
+      </span>
       <b>{title}</b>
       {message && <p className="mute">{message}</p>}
-      {action}
+      {action && <div className="es-action">{action}</div>}
     </div>
   );
 }

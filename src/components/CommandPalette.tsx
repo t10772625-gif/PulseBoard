@@ -3,12 +3,13 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { ProjectId } from "@/types";
+import { taskKey } from "@/lib/task-keys";
 import { useT } from "@/i18n/I18nProvider";
 
 type Item = { label: string; icon: string; run: () => void };
 
 export default function CommandPalette() {
-  const { paletteOpen, closePalette, openPalette, openDrawer, toggleTheme, currentProjectId, tasks, projects, openNewTaskModal } = useStore();
+  const { paletteOpen, closePalette, openPalette, openDrawer, toggleTheme, currentProjectId, tasks, projects, openNewTaskModal, taskPrefix } = useStore();
   const router = useRouter();
   const { t: tt } = useT();
   const [query, setQuery] = useState("");
@@ -35,7 +36,11 @@ export default function CommandPalette() {
       icon: "▦",
       run: () => router.push(`/projects/${k}`),
     })),
-    ...tasks.map((t) => ({ label: tt("palette.task", { title: t.title }), icon: "✓", run: () => openDrawer(t.id) })),
+    // Task key first, so typing "WEB-12" finds the task
+    ...tasks.map((t) => {
+      const key = taskKey(t, taskPrefix);
+      return { label: tt("palette.task", { title: key ? `${key} ${t.title}` : t.title }), icon: "✓", run: () => openDrawer(t.id) };
+    }),
   ];
 
   const items = allItems.filter((x) => x.label.toLowerCase().includes(query.toLowerCase())).slice(0, 8);

@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { serverTranslator } from "@/i18n/server";
+import { accessTokenFrom, gmailSend, googleConfigured } from "@/lib/server/google";
 
-// Real email notifications (phase B3) via Resend.
-// Env (set in .env.local, never committed):
-//   RESEND_API_KEY   – from resend.com
-//   EMAIL_FROM       – a sender on a domain verified in Resend, e.g. "PulseBoard <notify@yourdomain.com>"
+// Real email notifications (phase B3). Two ways to send, tried in this order:
+//   1. the SENDER's own Gmail, if they connected Google with the gmail.send scope
+//      (Integrations → Email; env GOOGLE_OAUTH_CLIENT_ID / _SECRET, INTEGRATION_ENCRYPTION_KEY)
+//   2. Resend. Env (set in .env.local, never committed):
+//      RESEND_API_KEY   – from resend.com
+//      EMAIL_FROM       – a sender on a domain verified in Resend, e.g. "PulseBoard <notify@yourdomain.com>"
 //
 // Safety: only signed-in users; only to members of the sender's own workspace
 // (checked through RLS); max 50 emails per sender per hour; every send is logged
@@ -16,11 +20,19 @@ const MAX_PER_HOUR = 50;
 // Safe message for the browser; raw DB/provider errors only go to the server log / email_outbox
 const GENERIC_ERROR = "Operation could not be completed";
 
-type Body = { workspaceId: string; toUserId: string; subject: string; text: string; template?: string; taskUrl?: string; locale?: string };
+const BodySchema = z.object({
+  workspaceId: z.string().uuid(),
+  toUserId: z.string().uuid(),
+  subject: z.string().max(1000),
+  text: z.string().max(20000),
+  template: z.string().max(64).optional(),
+  taskUrl: z.string().max(2048).optional(),
+  locale: z.string().max(16).optional(),
+});
+type Body = z.infer<typeof BodySchema>;
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-const isStr = (v: unknown, max: number): v is string => typeof v === "string" && v.length <= max;
 
 export async function POST(req: Request) {
   // CSRF defence in depth: a browser always sends Origin on cross-site POSTs, so a
@@ -38,28 +50,20 @@ export async function POST(req: Request) {
 
   const key = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM;
+  // The sender's own Google connection (RLS: only their own row is visible)
+  const { data: google } = await sb.from("oauth_connections").select("account_email, scopes, refresh_token_enc").eq("provider", "google").maybeSingle();
+  const viaGmail = !!google && String(google.scopes).includes("gmail.send") && googleConfigured();
   // 503 tells the app "email not set up" (it then skips quietly); variable names stay in this file only
-  if (!key || !from) return NextResponse.json({ error: "Email is not configured" }, { status: 503 });
+  if (!viaGmail && (!key || !from)) return NextResponse.json({ error: "Email is not configured" }, { status: 503 });
 
   let body: Body;
   try {
-    body = (await req.json()) as Body;
+    const parsed = BodySchema.safeParse(await req.json());
+    if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    body = parsed.data;
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  // Shape check (Zod isn't installed; see DEP-ZOD-001): only plain strings of bounded size
-  if (
-    !body ||
-    typeof body !== "object" ||
-    !isStr(body.workspaceId, 64) ||
-    !isStr(body.toUserId, 64) ||
-    !isStr(body.subject, 1000) ||
-    !isStr(body.text, 20000) ||
-    (body.template !== undefined && !isStr(body.template, 64)) ||
-    (body.taskUrl !== undefined && !isStr(body.taskUrl, 2048)) ||
-    (body.locale !== undefined && !isStr(body.locale, 16))
-  )
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   const subject = String(body.subject ?? "").slice(0, 200).trim();
   const text = String(body.text ?? "").slice(0, 5000).trim();
   if (!body.workspaceId || !body.toUserId || !subject || !text) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
@@ -95,6 +99,23 @@ export async function POST(req: Request) {
 
   const { t, dir, locale } = await serverTranslator(body.locale);
   const link = body.taskUrl && /^https?:\/\//.test(body.taskUrl) ? `<p><a href="${escapeHtml(body.taskUrl)}">${escapeHtml(t("email.open"))}</a></p>` : "";
+  const html = `<div dir="${dir}" lang="${locale}"><p>${escapeHtml(t("email.greeting", { name: profile.full_name || t("email.there") }))}</p><p>${escapeHtml(text)}</p>${link}<p style="color:#63788b;font-size:12px">${escapeHtml(t("email.footer"))}</p></div>`;
+
+  if (viaGmail && google) {
+    const access = await accessTokenFrom(google.refresh_token_enc as string);
+    const sent = access ? await gmailSend(access, String(google.account_email), profile.email, subject, text, html) : { ok: false, status: 401 };
+    await sb
+      .from("email_outbox")
+      .update({ status: sent.ok ? "sent" : "failed", provider_id: sent.ok && "id" in sent ? `gmail:${sent.id}` : null, error: sent.ok ? null : `Gmail HTTP ${sent.status}` })
+      .eq("id", queued.id);
+    if (!sent.ok) {
+      console.error("[api/email] gmail send failed", { outboxId: queued.id, status: sent.status });
+      return NextResponse.json({ error: GENERIC_ERROR }, { status: 502 });
+    }
+    return NextResponse.json({ ok: true, via: "gmail" });
+  }
+  if (!key || !from) return NextResponse.json({ error: "Email is not configured" }, { status: 503 });
+
   let res: Response;
   try {
     res = await fetch("https://api.resend.com/emails", {
@@ -105,7 +126,7 @@ export async function POST(req: Request) {
         to: [profile.email],
         subject,
         text,
-        html: `<div dir="${dir}" lang="${locale}"><p>${escapeHtml(t("email.greeting", { name: profile.full_name || t("email.there") }))}</p><p>${escapeHtml(text)}</p>${link}<p style="color:#63788b;font-size:12px">${escapeHtml(t("email.footer"))}</p></div>`,
+        html,
       }),
     });
   } catch {

@@ -2,7 +2,7 @@
 // types. The signed-in user is always "me" inside the app; other members keep
 // their auth user id. Every call runs as the user, so RLS decides what's allowed.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { Attachment, AutomationRule, Client, Comment, Member, MemberId, Notification, Plan, Project, ShareLink, Subtask, Task } from "@/types";
+import { ActivityEvent, Attachment, AuditEvent, AutomationRule, Branding, Client, Comment, CustomFieldDef, Member, MemberId, Notification, Plan, ProfileDetails, Project, SavedFilter, ShareLink, SlaTargets, Subtask, Task, TaskTemplate } from "@/types";
 import { TODAY } from "../mock-data";
 import { getActiveLocale, tr } from "@/i18n";
 import { DEFAULT_PERMISSIONS, type PermissionKey, type PermissionMatrix, type Role } from "../permissions";
@@ -28,6 +28,7 @@ const agoToTs = (n: number | undefined) => (n === undefined ? null : new Date(Da
 
 type TaskRow = {
   id: string;
+  number: number | null;
   project_id: string;
   status: string;
   title: string;
@@ -59,6 +60,7 @@ export function rowToTask(ctx: DbCtx, r: TaskRow): Task {
   const created = daysAgo(r.created_at) ?? 0;
   return {
     id: r.id,
+    number: r.number ?? undefined,
     title: r.title,
     projectId: r.project_id,
     status: r.status,
@@ -86,7 +88,8 @@ export function rowToTask(ctx: DbCtx, r: TaskRow): Task {
   };
 }
 
-// Only the fields present in the patch are written
+// Only the fields present in the patch are written. The task number is never sent:
+// the database hands it out (22_task-keys).
 export function taskPatchToRow(ctx: DbCtx, p: Partial<Task>): Record<string, unknown> {
   const row: Record<string, unknown> = {};
   if (p.title !== undefined) row.title = p.title;
@@ -119,9 +122,26 @@ export function initials(name: string, email: string) {
   return ((parts[0]?.[0] ?? "?") + (parts[1]?.[0] ?? "")).toUpperCase();
 }
 
+export type WorkspaceSettings = { branding: Branding; sla: SlaTargets; aiEnabled: boolean; domainToken: string };
+
 export type Loaded = {
   ctx: DbCtx;
   workspaceName: string;
+  // The protected workspace creator ("me" when it is you), null if unknown
+  creatorId: MemberId | null;
+  // Task id prefix ("PB" → PB-123); "" before 22_task-keys
+  taskPrefix: string;
+  customFields: CustomFieldDef[];
+  savedFilters: SavedFilter[];
+  templates: TaskTemplate[];
+  settings: WorkspaceSettings;
+  digestMode: boolean;
+  audit: AuditEvent[];
+  activity: Record<string, ActivityEvent[]>;
+  survey: Partial<Record<MemberId, number>>;
+  aiUsed: number;
+  profile: ProfileDetails;
+  deactivated: boolean;
   plan: Plan;
   meName: string;
   meEmail: string;
@@ -140,11 +160,37 @@ export type Loaded = {
   attachments: Record<string, Attachment[]>;
 };
 
+export const DEFAULT_BRAND_COLOR = "#12B5A0";
+
+// Monday of this week / first of this month as YYYY-MM-DD in UTC, the same values
+// Postgres date_trunc('week' | 'month', now()) gives for the pulse survey and AI usage
+export function startOfWeek() {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+const startOfMonth = () => new Date().toISOString().slice(0, 8) + "01";
+
 const fmtWhen = (ts: string) => new Date(ts).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
 function check<T>(res: { data: T | null; error: { message: string } | null }): T {
   if (res.error) throw new Error(res.error.message);
   return res.data as T;
+}
+
+// For tables / columns added by migrations 21–25: before those migrations run, the
+// app keeps working with defaults instead of failing to load. Only "doesn't exist"
+// errors are tolerated; anything else (e.g. a permission error) still fails loudly.
+const MISSING = /does not exist|schema cache|PGRST20[45]|42P01|42703/i;
+function soft<T>(res: { data: T | null; error: { message: string; code?: string } | null }, fallback: T): T {
+  if (res.error) {
+    if (MISSING.test(`${res.error.code ?? ""} ${res.error.message}`)) {
+      console.warn("[load] not migrated yet, using defaults:", res.error.message);
+      return fallback;
+    }
+    throw new Error(res.error.message);
+  }
+  return (res.data ?? fallback) as T;
 }
 
 // Loads the user's first workspace and everything the app shows.
@@ -153,8 +199,11 @@ export async function loadWorkspace(sb: SupabaseClient): Promise<Loaded | null> 
   const uid = auth.user?.id;
   if (!uid) return null;
 
-  const mine = check(await sb.from("workspace_members").select("workspace_id, workspaces(name, plan)").eq("user_id", uid).limit(1));
-  const first = mine?.[0] as unknown as { workspace_id: string; workspaces: { name: string; plan: string } } | undefined;
+  let mineRes = await sb.from("workspace_members").select("workspace_id, workspaces(name, plan, created_by, task_prefix)").eq("user_id", uid).limit(1);
+  // Before 21_simplify-roles / 22_task-keys these columns don't exist
+  if (mineRes.error && MISSING.test(mineRes.error.message)) mineRes = (await sb.from("workspace_members").select("workspace_id, workspaces(name, plan)").eq("user_id", uid).limit(1)) as typeof mineRes;
+  const mine = check(mineRes);
+  const first = mine?.[0] as unknown as { workspace_id: string; workspaces: { name: string; plan: string; created_by?: string | null; task_prefix?: string } } | undefined;
   if (!first) throw new Error("No workspace found for this account.");
   const ctx: DbCtx = { sb, ws: first.workspace_id, uid };
 
@@ -166,7 +215,9 @@ export async function loadWorkspace(sb: SupabaseClient): Promise<Loaded | null> 
     const p = profileRows.find((x) => x.id === m.user_id);
     const id = fromDbUser(ctx, m.user_id);
     const name = p?.full_name || p?.email?.split("@")[0] || "Member";
-    members[id] = { id, name, initials: initials(p?.full_name ?? "", p?.email ?? "?"), colorClass: COLORS[i % 4], role: m.role };
+    // A database that hasn't run 21_simplify-roles still says "Owner": treat it as Admin
+    const role = (m.role as string) === "Owner" ? "Admin" : m.role;
+    members[id] = { id, name, initials: initials(p?.full_name ?? "", p?.email ?? "?"), colorClass: COLORS[i % 4], role };
     capacity[id] = m.capacity;
   });
 
@@ -252,7 +303,7 @@ export async function loadWorkspace(sb: SupabaseClient): Promise<Loaded | null> 
   const permRows = check(await sb.from("role_permissions").select("role, permission, allowed").eq("workspace_id", ctx.ws)) as { role: Role; permission: PermissionKey; allowed: boolean }[];
   const permissions: PermissionMatrix = JSON.parse(JSON.stringify(DEFAULT_PERMISSIONS));
   permRows.forEach((p) => {
-    if (p.role !== "Owner" && permissions[p.role]) permissions[p.role][p.permission] = p.allowed;
+    if (p.role !== "Admin" && permissions[p.role]) permissions[p.role][p.permission] = p.allowed;
   });
 
   // Attachments: private bucket, so each file gets a short-lived signed URL
@@ -272,9 +323,94 @@ export async function loadWorkspace(sb: SupabaseClient): Promise<Loaded | null> 
     });
   }
 
+  // Workspace configuration that used to live only in the browser (24_workspace-data)
+  const fieldRows = soft(await sb.from("custom_field_defs").select("id, name, type, options").eq("workspace_id", ctx.ws).order("position").order("created_at"), []) as {
+    id: string;
+    name: string;
+    type: CustomFieldDef["type"];
+    options: string[];
+  }[];
+  const customFields: CustomFieldDef[] = fieldRows.map((f) => ({ id: f.id, name: f.name, type: f.type, options: f.type === "select" ? f.options : undefined }));
+
+  const filterRows = soft(await sb.from("saved_filters").select("id, name, query").eq("workspace_id", ctx.ws).eq("user_id", uid).order("created_at"), []) as SavedFilter[];
+
+  const templateRows = soft(await sb.from("task_templates").select("id, name, tasks").eq("workspace_id", ctx.ws).order("created_at"), []) as TaskTemplate[];
+
+  const settingsRow = soft(await sb.from("workspace_settings").select("*").eq("workspace_id", ctx.ws).maybeSingle(), null) as {
+    brand_name: string | null;
+    brand_color: string | null;
+    sla_high_days: number;
+    sla_medium_days: number;
+    sla_low_days: number;
+    ai_enabled: boolean;
+    custom_domain: string | null;
+    domain_token: string;
+  } | null;
+  const settings: WorkspaceSettings = {
+    branding: {
+      name: settingsRow?.brand_name || "PulseBoard",
+      color: settingsRow?.brand_color || DEFAULT_BRAND_COLOR,
+      domain: settingsRow?.custom_domain ?? "",
+      domainStatus: settingsRow?.custom_domain ? "pending" : "none",
+    },
+    sla: { h: settingsRow?.sla_high_days ?? 3, m: settingsRow?.sla_medium_days ?? 7, l: settingsRow?.sla_low_days ?? 14 },
+    aiEnabled: !!settingsRow?.ai_enabled,
+    domainToken: settingsRow?.domain_token ?? "",
+  };
+
+  const prefRow = soft(await sb.from("user_preferences").select("digest_mode").eq("user_id", uid).maybeSingle(), null) as { digest_mode: boolean } | null;
+
+  // History: the latest workspace events feed the audit log and each task's activity
+  const eventRows = check(await sb.from("task_events").select("id, task_id, actor_id, type, message, created_at").eq("workspace_id", ctx.ws).order("created_at", { ascending: false }).limit(500)) as {
+    id: string;
+    task_id: string | null;
+    actor_id: string | null;
+    type: string;
+    message: string;
+    created_at: string;
+  }[];
+  const audit: AuditEvent[] = eventRows.map((e) => ({ id: e.id, at: new Date(e.created_at).getTime(), actor: e.actor_id ? fromDbUser(ctx, e.actor_id) : "", message: e.message, taskId: e.task_id ?? undefined }));
+  const activity: Record<string, ActivityEvent[]> = {};
+  eventRows.forEach((e) => {
+    if (e.task_id) (activity[e.task_id] ||= []).push({ id: e.id, taskId: e.task_id, actor: e.actor_id ? fromDbUser(ctx, e.actor_id) : "", message: e.message, at: fmtWhen(e.created_at) });
+  });
+
+  // Team pulse: this week's answers (yours; Admins also see the team's)
+  const surveyRows = soft(await sb.from("pulse_survey").select("user_id, score").eq("workspace_id", ctx.ws).eq("week", startOfWeek()), []) as { user_id: string; score: number }[];
+  const survey: Partial<Record<MemberId, number>> = Object.fromEntries(surveyRows.map((r) => [fromDbUser(ctx, r.user_id), r.score]));
+
+  const usageRow = soft(await sb.from("ai_usage").select("used").eq("workspace_id", ctx.ws).eq("month", startOfMonth()).maybeSingle(), null) as { used: number } | null;
+
+  const meProfile = soft(await sb.from("profiles").select("job_title, team_size, use_case, deactivated_at").eq("id", uid).maybeSingle(), null) as {
+    job_title: string | null;
+    team_size: string | null;
+    use_case: string | null;
+    deactivated_at: string | null;
+  } | null;
+
   return {
     ctx,
     workspaceName: first.workspaces.name,
+    // Before 21_simplify-roles there is no created_by: the database Owner is the one who
+    // may change the plan (test_set_plan in 19 checks Owner), so treat them as the creator
+    creatorId: first.workspaces.created_by
+      ? fromDbUser(ctx, first.workspaces.created_by)
+      : (() => {
+          const owner = memberRows.find((m) => (m.role as string) === "Owner");
+          return owner ? fromDbUser(ctx, owner.user_id) : null;
+        })(),
+    taskPrefix: first.workspaces.task_prefix ?? "",
+    customFields,
+    savedFilters: filterRows,
+    templates: templateRows,
+    settings,
+    digestMode: !!prefRow?.digest_mode,
+    audit,
+    activity,
+    survey,
+    aiUsed: usageRow?.used ?? 0,
+    profile: { jobTitle: meProfile?.job_title ?? "", teamSize: meProfile?.team_size ?? "", useCase: meProfile?.use_case ?? "" },
+    deactivated: !!meProfile?.deactivated_at,
     plan: toPlan(first.workspaces.plan),
     meName: members.me?.name ?? "You",
     meEmail: auth.user?.email ?? "",
@@ -400,6 +536,30 @@ export function repo(ctx: DbCtx) {
     // Test plan switch until Stripe exists: the database function checks Owner +
     // the server-wide switch and writes an audit event (migration 19_test-plan-switch)
     setPlan: (plan: Plan) => run(sb.rpc("test_set_plan", { ws, new_plan: plan })),
+
+    // Task id prefix (PB-123): validated by the database CHECK; Admins only (RLS)
+    setTaskPrefix: (prefix: string) => run(sb.from("workspaces").update({ task_prefix: prefix }).eq("id", ws)),
+
+    // Workspace configuration (24_workspace-data)
+    insertCustomField: (f: CustomFieldDef, position: number) =>
+      run(sb.from("custom_field_defs").insert({ id: f.id, workspace_id: ws, name: f.name, type: f.type, options: f.options ?? [], position })),
+    deleteCustomField: (id: string) => run(sb.from("custom_field_defs").delete().eq("id", id)),
+    insertSavedFilter: (f: SavedFilter) => run(sb.from("saved_filters").insert({ id: f.id, workspace_id: ws, name: f.name, query: f.query })),
+    deleteSavedFilter: (id: string) => run(sb.from("saved_filters").delete().eq("id", id)),
+    insertTemplate: (t: TaskTemplate) => run(sb.from("task_templates").insert({ id: t.id, workspace_id: ws, name: t.name, tasks: t.tasks })),
+    deleteTemplate: (id: string) => run(sb.from("task_templates").delete().eq("id", id)),
+    updateSettings: (patch: Partial<{ brand_name: string | null; brand_color: string; sla_high_days: number; sla_medium_days: number; sla_low_days: number; ai_enabled: boolean; custom_domain: string | null }>) =>
+      run(sb.from("workspace_settings").update(patch).eq("workspace_id", ws)),
+    setDigestMode: (digest_mode: boolean) => run(sb.from("user_preferences").upsert({ digest_mode }, { onConflict: "user_id" })),
+    answerPulse: (score: number) => run(sb.rpc("answer_pulse", { ws, s: score })),
+    // Spends one AI action against the plan's monthly cap; returns the new count
+    useAiAction: async (): Promise<number> => {
+      const { data, error } = await sb.rpc("use_ai_action", { ws });
+      if (error) throw new Error(/ai limit/i.test(error.message) ? "AI_LIMIT" : error.message);
+      return Number(data);
+    },
+    updateProfileDetails: (d: ProfileDetails) =>
+      run(sb.from("profiles").update({ job_title: d.jobTitle.trim() || null, team_size: d.teamSize || null, use_case: d.useCase || null }).eq("id", uid)),
   };
 }
 

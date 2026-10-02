@@ -12,6 +12,7 @@ import MultiSelectDropdown from "@/components/MultiSelectDropdown";
 import BulkBar from "@/components/BulkBar";
 import BoardMenu from "@/components/BoardMenu";
 import Gate, { PlanTag } from "@/components/Gate";
+import { taskKey } from "@/lib/task-keys";
 import { useT } from "@/i18n/I18nProvider";
 import type { MessageKey } from "@/i18n";
 
@@ -364,6 +365,7 @@ export default function ProjectBoard() {
                     </td>
                   )}
                   <td>
+                    {taskKey(t, store.taskPrefix) && <b className="task-key" style={{ marginInlineEnd: 6 }}>{taskKey(t, store.taskPrefix)}</b>}
                     <b>{t.title}</b>
                     {isBlocked(t, tasks) ? " 🔒" : ""}
                   </td>

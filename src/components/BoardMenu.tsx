@@ -6,11 +6,12 @@ import { download, parseCsv, toCsv } from "@/lib/csv";
 import { MemberId, Priority, ProjectId } from "@/types";
 import Modal from "./Modal";
 import Gate from "./Gate";
+import { taskKey } from "@/lib/task-keys";
 import { useT } from "@/i18n/I18nProvider";
 
 // Import/export and templates for one board (CORE-03, CORE-08, CORE-09, CORE-10).
 export default function BoardMenu({ projectId, onClose }: { projectId: ProjectId; onClose: () => void }) {
-  const { tasks, projects, members, getColumns, columnLabel, createTask, templates, applyTemplate, saveTemplate, applyBoardTemplate, toast, createShareLink, shareLinks, revokeShareLink } = useStore();
+  const { tasks, projects, members, getColumns, columnLabel, createTask, templates, applyTemplate, saveTemplate, removeTemplate, applyBoardTemplate, toast, createShareLink, shareLinks, revokeShareLink, taskPrefix } = useStore();
   const { t: tt } = useT();
   const [tplName, setTplName] = useState("");
   const [preview, setPreview] = useState<string[][] | null>(null);
@@ -23,9 +24,9 @@ export default function BoardMenu({ projectId, onClose }: { projectId: ProjectId
       .map((t) => {
         const d = new Date(TODAY);
         d.setDate(d.getDate() + t.dueOffset);
-        return [t.title, columnLabel(projectId, t.status), t.priority, members[t.assignee].name, d.toISOString().slice(0, 10), t.labels.join(";"), t.description];
+        return [taskKey(t, taskPrefix), t.title, columnLabel(projectId, t.status), t.priority, members[t.assignee]?.name ?? "", d.toISOString().slice(0, 10), t.labels.join(";"), t.description];
       });
-    download(`${project.name}.csv`, toCsv([["Title", "Status", "Priority", "Assignee", "Due", "Labels", "Description"], ...rows]));
+    download(`${project.name}.csv`, toCsv([["Key", "Title", "Status", "Priority", "Assignee", "Due", "Labels", "Description"], ...rows]));
     toast(tt("boardMenu.exported", { n: rows.length }));
   }
 
@@ -102,17 +103,24 @@ export default function BoardMenu({ projectId, onClose }: { projectId: ProjectId
           <h3>{tt("boardMenu.taskTemplates")}</h3>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {templates.map((t) => (
-              <button
-                key={t.id}
-                className="ghost"
-                onClick={() => {
-                  const n = applyTemplate(t.id, projectId);
-                  toast(tt("boardMenu.addedFromTpl", { n, name: t.name }));
-                  onClose();
-                }}
-              >
-                ＋ {t.name} ({t.tasks.length})
-              </button>
+              <span key={t.id} style={{ display: "inline-flex", gap: 4 }}>
+                <button
+                  className="ghost"
+                  title={t.builtIn ? tt("boardMenu.builtInTpl") : tt("boardMenu.savedTpl")}
+                  onClick={() => {
+                    const n = applyTemplate(t.id, projectId);
+                    toast(tt("boardMenu.addedFromTpl", { n, name: t.name }));
+                    onClose();
+                  }}
+                >
+                  ＋ {t.name} ({t.tasks.length}){t.builtIn ? ` · ${tt("boardMenu.builtIn")}` : ""}
+                </button>
+                {!t.builtIn && (
+                  <button className="ghost sm danger" aria-label={tt("boardMenu.deleteTpl", { name: t.name })} onClick={() => window.confirm(tt("boardMenu.deleteTplConfirm", { name: t.name })) && removeTemplate(t.id)}>
+                    ✕
+                  </button>
+                )}
+              </span>
             ))}
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>

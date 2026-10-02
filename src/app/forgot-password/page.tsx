@@ -5,6 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { getSupabase, supabaseConfigured } from "@/lib/supabase/client";
 import { AuthHero } from "@/components/AuthHero";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import FieldError, { invalid } from "@/components/FieldError";
+import { v, type FieldMsg } from "@/lib/validate";
 import { useT } from "@/i18n/I18nProvider";
 
 function ForgotForm() {
@@ -13,6 +15,7 @@ function ForgotForm() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [emailErr, setEmailErr] = useState<FieldMsg>(null);
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -20,6 +23,9 @@ function ForgotForm() {
     const supabase = getSupabase();
     if (!supabase) return;
     const email = String(new FormData(e.currentTarget).get("email") ?? "").trim();
+    const problem = v.email(email);
+    setEmailErr(problem);
+    if (problem) return;
     setBusy(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
@@ -32,7 +38,7 @@ function ForgotForm() {
   }
 
   return (
-    <form className="form" onSubmit={submit}>
+    <form className="form" onSubmit={submit} noValidate>
       <div className="auth-lang">
         <LanguageSwitcher />
       </div>
@@ -53,7 +59,8 @@ function ForgotForm() {
           )}
           <label>
             {t("common.email")}
-            <input name="email" type="email" dir="ltr" autoComplete="email" required />
+            <input name="email" type="email" dir="ltr" autoComplete="email" maxLength={254} placeholder={t("auth.emailPlaceholder")} required onInput={() => setEmailErr(null)} {...invalid("err-email", emailErr)} />
+            <FieldError id="err-email" msg={emailErr} />
           </label>
           {error && <p className="warn" role="alert">{error}</p>}
           <button className="btn" disabled={busy}>
@@ -76,8 +83,6 @@ export default function Page() {
   return (
     <section className="auth">
       <AuthHero
-        cardA={{ title: t("auth.loginCardA"), subtitle: t("auth.loginCardASub") }}
-        cardB={{ title: t("auth.cardB"), subtitle: t("auth.cardBSub") }}
         heading={t("forgot.heroHeading")}
         description={t("forgot.heroDesc")}
       />

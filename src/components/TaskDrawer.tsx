@@ -9,6 +9,7 @@ import { Comment, Energy, MemberId, Priority, Recurrence, Status, Task } from "@
 import { Avatar, Switch } from "./ui";
 import Dropdown from "./Dropdown";
 import Gate from "./Gate";
+import { taskKey } from "@/lib/task-keys";
 import { useT } from "@/i18n/I18nProvider";
 
 function activityIcon(message: string) {
@@ -129,9 +130,9 @@ function AiAssist({ task, locked }: { task: Task; locked: boolean }) {
   const { t: tt, rich } = useT();
   const me = members.me?.name.split(" ")[0] ?? tt("common.you");
   const [open, setOpen] = useState<string | null>(null);
-  const run = (key: string) => {
+  const run = async (key: string) => {
     if (open === key) return setOpen(null);
-    if (spendAi()) setOpen(key);
+    if (await spendAi()) setOpen(key);
   };
   const match = open === "match" ? smartMatch(task, tasks, history, members, capacity) : null;
   const prio = open === "prio" ? autoPriority({ ...task, reports: findDuplicates(task.title, tasks, task.id).length }) : null;
@@ -301,6 +302,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
   const {
     tasks,
     projects,
+    taskPrefix,
     members,
     comments,
     activity,
@@ -404,8 +406,22 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
   return (
     <>
       <div className="meta" style={{ marginBottom: 10 }}>
-        <span className="chip" style={{ color: projects[task.projectId]?.color }}>
-          {projects[task.projectId]?.name}
+        <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <span className="chip" style={{ color: projects[task.projectId]?.color }}>
+            {projects[task.projectId]?.name}
+          </span>
+          {taskKey(task, taskPrefix) && (
+            <button
+              className="task-key"
+              title={tt("drawer.copyKey")}
+              onClick={() => {
+                void navigator.clipboard?.writeText(taskKey(task, taskPrefix));
+                toast(tt("drawer.keyCopied", { key: taskKey(task, taskPrefix) }));
+              }}
+            >
+              {taskKey(task, taskPrefix)}
+            </button>
+          )}
         </span>
         <span style={{ display: "flex", gap: 6 }}>
           <button className="ic" aria-label={tt("drawer.focus")} title={tt("drawer.focusMode")} onClick={() => setFocusTaskId(taskId)}>

@@ -25,9 +25,11 @@ type Props = {
   onSwitch?: (p: Plan) => void;
   // Real mode: the switch is saved to the database (test switch until Stripe)
   testMode?: boolean;
+  // Public page while signed in: show your current plan, link to Settings → Plan
+  signedIn?: boolean;
 };
 
-export default function PlanCards({ seats, mode, current, canSwitch, onSwitch, testMode }: Props) {
+export default function PlanCards({ seats, mode, current, canSwitch, onSwitch, testMode, signedIn }: Props) {
   const { t, fmt } = useT();
   return (
     <div className="pr-cards">
@@ -63,7 +65,15 @@ export default function PlanCards({ seats, mode, current, canSwitch, onSwitch, t
                   </li>
                 ))}
               </ul>
-              {mode === "public" ? (
+              {mode === "public" && signedIn ? (
+                isCurrent ? (
+                  <span className="pr-cta pr-cta-current">{t("pricing.currentPlan")}</span>
+                ) : (
+                  <Link className={`pr-cta ${p === "basic" ? "" : "pr-cta-strong"}`} href="/settings/plan">
+                    {t("pricing.changeInSettings", { plan: name })}
+                  </Link>
+                )
+              ) : mode === "public" ? (
                 <Link className={`pr-cta ${p === "basic" ? "" : "pr-cta-strong"}`} href="/register">
                   {p === "basic" ? t("pricing.startFree") : t("pricing.startFreeLater", { plan: name })}
                 </Link>

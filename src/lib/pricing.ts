@@ -94,7 +94,6 @@ export const PRICING_GROUPS: PricingGroup[] = [
     title: "pricing.group.integrations",
     rows: [
       { label: "pricing.row.integrations", note: "pricing.note.simulated", basic: false, pro: true, enterprise: true, status: "preview" },
-      { label: "pricing.row.api", basic: false, pro: true, enterprise: true, status: "planned" },
     ],
   },
   {

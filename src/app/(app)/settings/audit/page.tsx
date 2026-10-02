@@ -21,7 +21,7 @@ export default function AuditSettings() {
               onClick={() =>
                 download(
                   "audit-log.csv",
-                  toCsv([[t("audit.colTime"), t("audit.colActor"), t("audit.colEvent"), t("audit.colTask")], ...s.audit.map((a) => [new Date(a.at).toISOString(), s.members[a.actor].name, a.message, a.taskId ?? ""])])
+                  toCsv([[t("audit.colTime"), t("audit.colActor"), t("audit.colEvent"), t("audit.colTask")], ...s.audit.map((a) => [new Date(a.at).toISOString(), (s.members[a.actor]?.name ?? t("ui.formerMember")), a.message, a.taskId ?? ""])])
                 )
               }
             >
@@ -32,7 +32,7 @@ export default function AuditSettings() {
         {s.audit.length ? (
           s.audit.slice(0, 12).map((a) => (
             <p key={a.id} className="act-item" style={{ fontSize: 13 }}>
-              <span className="mute">{fmt.time(a.at)}</span> {s.members[a.actor].name}: {a.message}
+              <span className="mute">{fmt.time(a.at)}</span> {(s.members[a.actor]?.name ?? t("ui.formerMember"))}: {a.message}
             </p>
           ))
         ) : (

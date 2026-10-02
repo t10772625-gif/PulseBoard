@@ -20,6 +20,8 @@ import {
   ProjectId,
   SavedFilter,
   ShareLink,
+  SlaTargets,
+  ProfileDetails,
   Status,
   Task,
   TaskTemplate,
@@ -46,7 +48,9 @@ import {
 import { PLANS, hasFeature } from "./plans";
 import { DEFAULT_LOCALE, isSupportedLocale, loadLocale, tr } from "@/i18n";
 import { getSupabase, supabaseConfigured } from "./supabase/client";
-import { initials, loadWorkspace, repo, rowToTask, type Invite, type Repo } from "./supabase/repo";
+import { DEFAULT_BRAND_COLOR, initials, loadWorkspace, repo, rowToTask, type Invite, type Repo } from "./supabase/repo";
+import { nextTaskNumber, PREFIX_PATTERN, withDemoNumbers } from "./task-keys";
+import { aiDrafts, notifyServer, type AiDraft } from "./integrations";
 import { DEFAULT_PERMISSIONS, canEditRole, lockedForRole, type PermissionKey, type PermissionMatrix } from "./permissions";
 
 export type ColumnDef = [Status, string, number];
@@ -129,6 +133,9 @@ type Store = {
 
   projects: Record<ProjectId, Project>;
   addProject: (name: string, description: string, color: string, gradient: string) => ProjectId;
+  // Task id prefix for the workspace ("PB" -> PB-123); Admin; returns an error message or null
+  taskPrefix: string;
+  setTaskPrefix: (prefix: string) => Promise<string | null>;
 
   getColumns: (projectId: ProjectId) => ColumnDef[];
   addColumn: (projectId: ProjectId, label: string, limit?: number) => void;
@@ -205,19 +212,29 @@ type Store = {
   pauseTracking: () => void;
   endTracking: () => void;
 
+  // Team pulse (one answer per person per week, saved in real mode)
   vote: number | null;
   setVote: (v: number) => void;
   survey: Partial<Record<MemberId, number>>;
+  // SLA target days per priority (workspace setting)
+  sla: SlaTargets;
+  setSla: (s: SlaTargets) => void;
 
   // Plan & gating
   plan: Plan;
   setPlan: (p: Plan) => void;
-  // Owner-only plan change: local in demo mode, saved to the database in real mode
+  // Creator-only plan change: local in demo mode, saved to the database in real mode
   // (test switch until Stripe billing exists; no payment is taken)
   changePlan: (p: Plan) => Promise<boolean>;
   can: (featureId: string) => boolean;
+  // AI assistant actions used this month; spendAi() takes one (counted by the database in real mode)
   aiUses: number;
-  spendAi: () => boolean;
+  spendAi: () => Promise<boolean>;
+  // Workspace AI opt-in (Admin): only then is text sent to the AI provider
+  aiEnabled: boolean;
+  // Google Gemini drafts (real mode, AI on): spends one action on the server; null on failure
+  geminiDrafts: (action: "meeting" | "sentence", text: string) => Promise<AiDraft[] | null>;
+  setAiEnabled: (v: boolean) => Promise<boolean>;
 
   // Customization
   customFields: CustomFieldDef[];
@@ -228,6 +245,7 @@ type Store = {
   removeFilter: (id: string) => void;
   templates: TaskTemplate[];
   saveTemplate: (name: string, projectId: ProjectId) => void;
+  removeTemplate: (id: string) => void;
   applyTemplate: (templateId: string, projectId: ProjectId) => number;
 
   // Automation
@@ -247,6 +265,10 @@ type Store = {
   revokeShareLink: (token: string) => void;
   branding: Branding;
   setBranding: (b: Partial<Branding>) => void;
+  // Custom domain: save it, then check the DNS TXT record on the server (Admin)
+  saveDomain: (domain: string) => Promise<boolean>;
+  checkDomain: () => Promise<{ verified: boolean; record: { name: string; value: string } } | null>;
+  domainRecord: { name: string; value: string } | null;
 
   // Focus
   taskSwitches: number;
@@ -271,18 +293,28 @@ type Store = {
   canEdit: boolean;
   // RBAC: the signed-in user's real role, the admin-editable matrix, and a check
   myRole: Member["role"];
+  // The protected workspace creator: can't be demoted or removed, controls billing
+  creatorId: MemberId | null;
+  isCreator: boolean;
   permissions: PermissionMatrix;
   setPermission: (role: Member["role"], key: PermissionKey, value: boolean) => void;
   resetPermissions: (role: Member["role"]) => void;
   allowed: (key: PermissionKey) => boolean;
   realMode: boolean;
+  // Database id of the loaded workspace ("" in demo mode), for server routes
+  workspaceId: string;
+  // Your auth user id in real mode ("" in demo); inside the app you are always "me"
+  myUserId: string;
   workspaceName: string;
   myEmail: string;
   // Real mode: "loading" until the workspace arrives from the database, "error" if it couldn't load
   workspaceStatus: "loading" | "ready" | "error";
   retryWorkspace: () => void;
-  twoFactor: boolean;
-  setTwoFactor: (v: boolean) => void;
+  // Your sign-up / profile answers and account state (real mode)
+  profile: ProfileDetails;
+  updateProfileDetails: (d: ProfileDetails) => Promise<string | null>;
+  deactivated: boolean;
+  setAccountActive: (active: boolean) => Promise<boolean>;
   exportData: () => string;
   importData: (json: string) => boolean;
 
@@ -349,6 +381,11 @@ function changedFields(a: Task, b: Task): Partial<Task> {
 // every piece of workspace data starts empty and comes only from the database.
 const DEMO = !supabaseConfigured;
 
+// Demo tasks get numbers (real mode: the database does this)
+const DEMO_TASKS = withDemoNumbers(INITIAL_TASKS);
+// Starter templates shipped with the app (read-only; not stored per workspace)
+const BUILT_IN_TEMPLATES: TaskTemplate[] = INITIAL_TEMPLATES.map((t) => ({ ...t, builtIn: true }));
+
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [loggedIn, setLoggedIn] = useState(false);
   const [currentProjectId, setCurrentProjectId] = useState<ProjectId>("p1");
@@ -356,7 +393,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [boardFilters, setBoardFilters] = useState<BoardFilters>({ mine: false, high: false, blk: false, assignees: [] });
   const [projects, setProjects] = useState<Record<ProjectId, Project>>(DEMO ? PROJECTS : {});
   const [customColumns, setCustomColumns] = useState<Record<ProjectId, ColumnDef[]>>({});
-  const [tasks, setTasks] = useState<Task[]>(DEMO ? INITIAL_TASKS : []);
+  const [tasks, setTasks] = useState<Task[]>(DEMO ? DEMO_TASKS : []);
   const [members, setMembers] = useState<Record<MemberId, Member>>(DEMO ? MEMBERS : {});
   const [comments, setComments] = useState<Record<string, Comment[]>>(DEMO ? INITIAL_COMMENTS : {});
   const [activity, setActivity] = useState<Record<string, ActivityEvent[]>>(DEMO ? INITIAL_ACTIVITY : {});
@@ -384,21 +421,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [capacity, setCapacityState] = useState<Record<MemberId, number>>(DEMO ? DEFAULT_CAPACITY : {});
   const [plan, setPlan] = useState<Plan>(DEMO ? "enterprise" : "basic");
   const [aiUses, setAiUses] = useState(0);
-  const [customFields, setCustomFields] = useState<CustomFieldDef[]>([
-    { id: "cf-client", name: "Client", type: "text" },
-    { id: "cf-size", name: "Size", type: "select", options: ["S", "M", "L"] },
-  ]);
-  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([
-    { id: "sf1", name: "My open tasks", query: "my open" },
-    { id: "sf2", name: "Overdue", query: "overdue" },
-    { id: "sf3", name: "High priority", query: "high open" },
-  ]);
-  const [templates, setTemplates] = useState<TaskTemplate[]>(INITIAL_TEMPLATES);
+  // Sample fields / filters exist only in demo mode; a real workspace loads its own
+  const [customFields, setCustomFields] = useState<CustomFieldDef[]>(
+    DEMO
+      ? [
+          { id: "cf-client", name: "Client", type: "text" },
+          { id: "cf-size", name: "Size", type: "select", options: ["S", "M", "L"] },
+        ]
+      : []
+  );
+  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>(
+    DEMO
+      ? [
+          { id: "sf1", name: "My open tasks", query: "my open" },
+          { id: "sf2", name: "Overdue", query: "overdue" },
+          { id: "sf3", name: "High priority", query: "high open" },
+        ]
+      : []
+  );
+  // Starter templates ship with the app; the workspace's own saved templates follow them
+  const [templates, setTemplates] = useState<TaskTemplate[]>(BUILT_IN_TEMPLATES);
+  const [sla, setSlaState] = useState<SlaTargets>({ h: 3, m: 7, l: 14 });
+  const [aiEnabled, setAiEnabledState] = useState(DEMO);
+  const [creatorId, setCreatorId] = useState<MemberId | null>(DEMO ? "me" : null);
+  const [profile, setProfile] = useState<ProfileDetails>({ jobTitle: "", teamSize: "", useCase: "" });
+  const [deactivated, setDeactivated] = useState(false);
+  const [workspaceId, setWorkspaceId] = useState("");
+  const [taskPrefix, setTaskPrefixState] = useState(DEMO ? "PB" : "");
+  const [myUserId, setMyUserId] = useState("");
+  const workspaceIdRef = useRef("");
+  useEffect(() => {
+    workspaceIdRef.current = workspaceId;
+  }, [workspaceId]);
+  const [domainToken, setDomainToken] = useState("");
+  const [teamSurvey, setTeamSurvey] = useState<Partial<Record<MemberId, number>>>(DEMO ? { ak: 1, ba: 3 } : {});
   const [rules, setRules] = useState<AutomationRule[]>(DEMO ? INITIAL_RULES : []);
   const [webhookLog, setWebhookLog] = useState<WebhookDelivery[]>([]);
   const [clients, setClients] = useState<Client[]>(DEMO ? INITIAL_CLIENTS : []);
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
-  const [branding, setBrandingState] = useState<Branding>({ name: "PulseBoard", color: "#12B5A0", domain: "", domainStatus: "none" });
+  const [branding, setBrandingState] = useState<Branding>({ name: "PulseBoard", color: DEFAULT_BRAND_COLOR, domain: "", domainStatus: "none" });
   const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
   const [dndUntil, setDndUntil] = useState<number | null>(null);
   const [digestMode, setDigestMode] = useState(false);
@@ -424,10 +485,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (isSupportedLocale(saved) && saved !== DEFAULT_LOCALE) loadLocale(saved).then(() => setLanguageState(saved));
   }, []);
   // viewAsRole = the role the UI currently acts as. It starts as your real role;
-  // Owner/Admin can preview a lower role from Settings.
-  const [viewAsRole, setViewAsRole] = useState<Member["role"]>("Owner");
+  // an Admin can preview a lower role from Settings.
+  const [viewAsRole, setViewAsRole] = useState<Member["role"]>("Admin");
   const [permissions, setPermissions] = useState<PermissionMatrix>(DEFAULT_PERMISSIONS);
-  const [twoFactor, setTwoFactor] = useState(false);
   const [taskSwitches, setTaskSwitches] = useState(0);
   const [standups, setStandups] = useState<Store["standups"]>(
     DEMO
@@ -507,6 +567,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const customFieldsRef = useRef(customFields);
+  useEffect(() => {
+    customFieldsRef.current = customFields;
+  }, [customFields]);
+  // Branding inputs change on every keystroke: save the latest values after a pause
+  const brandingPatch = useRef<Parameters<Repo["updateSettings"]>[0]>({});
+  const brandingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistBranding = useCallback(
+    (patch: Parameters<Repo["updateSettings"]>[0]) => {
+      brandingPatch.current = { ...brandingPatch.current, ...patch };
+      if (brandingTimer.current) clearTimeout(brandingTimer.current);
+      brandingTimer.current = setTimeout(() => {
+        const next = brandingPatch.current;
+        brandingPatch.current = {};
+        persist((r) => r.updateSettings(next));
+      }, 600);
+    },
+    [persist]
+  );
+
   // Real mode: who is signed in (from Supabase auth events) and whether their workspace
   // has loaded. Loading is keyed on the user id, so every sign-in (including a new
   // sign-in after logout, or a different account) loads fresh data.
@@ -552,6 +632,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setPlan("basic");
     setWorkspaceName("");
     setMyEmail("");
+    setCustomFields([]);
+    setSavedFilters([]);
+    setTemplates(BUILT_IN_TEMPLATES);
+    setBrandingState({ name: "PulseBoard", color: DEFAULT_BRAND_COLOR, domain: "", domainStatus: "none" });
+    setSlaState({ h: 3, m: 7, l: 14 });
+    setAiEnabledState(false);
+    setAiUses(0);
+    setDigestMode(false);
+    setAudit([]);
+    setTeamSurvey({});
+    setVoteState(null);
+    setCreatorId(null);
+    setProfile({ jobTitle: "", teamSize: "", useCase: "" });
+    setDeactivated(false);
+    setWorkspaceId("");
+    setTaskPrefixState("");
+    setMyUserId("");
+    setDomainToken("");
   }, []);
 
   // Load the workspace after sign-in and subscribe to live changes
@@ -578,7 +676,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setMembers(d.members);
         setCapacityState(d.capacity);
         setComments(d.comments);
-        setActivity({});
+        setActivity(d.activity);
+        setAudit(d.audit);
+        setCustomFields(d.customFields);
+        setSavedFilters(d.savedFilters);
+        setTemplates([...BUILT_IN_TEMPLATES, ...d.templates]);
+        setBrandingState(d.settings.branding);
+        setSlaState(d.settings.sla);
+        setAiEnabledState(d.settings.aiEnabled);
+        setAiUses(d.aiUsed);
+        setDigestMode(d.digestMode);
+        setTeamSurvey(d.survey);
+        setVoteState(d.survey.me ?? null);
+        setCreatorId(d.creatorId);
+        setProfile(d.profile);
+        setDeactivated(d.deactivated);
+        setWorkspaceId(d.ctx.ws);
+        setTaskPrefixState(d.taskPrefix);
+        setMyUserId(d.ctx.uid);
+        setDomainToken(d.settings.domainToken);
         notificationIds.current = d.notifications.map((n) => n.id);
         setNotifications(d.notifications.map(({ id: _id, ...n }) => (void _id, n)));
         setClients(d.clients);
@@ -654,14 +770,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     if (!dbRef.current || !prev) return;
     const before = new Map(prev.map((t) => [t.id, t]));
+    // Once a change is saved, the server tells connected channels / rule webhooks /
+    // the assignee's browser (it re-checks the task itself, see /api/notify)
+    const ws = workspaceIdRef.current;
     for (const t of tasks) {
       const old = before.get(t.id);
       if (!old) {
         if (noInsertIds.current.delete(t.id)) continue;
-        persist((r) => r.insertTask(t));
+        persist((r) =>
+          r.insertTask(t).then(() => {
+            notifyServer(ws, t.id, "task.created");
+            if (t.priority === "h") notifyServer(ws, t.id, "task.high");
+            if (t.assignee !== "me") notifyServer(ws, t.id, "task.assigned");
+          })
+        );
       } else if (old !== t) {
         const patch = changedFields(old, t);
-        if (Object.keys(patch).length) persist((r) => r.updateTasks([t.id], patch));
+        if (Object.keys(patch).length)
+          persist((r) =>
+            r.updateTasks([t.id], patch).then(() => {
+              if (patch.status === "done") notifyServer(ws, t.id, "task.done");
+              if (patch.priority === "h") notifyServer(ws, t.id, "task.high");
+              if (patch.assignee && patch.assignee !== "me") notifyServer(ws, t.id, "task.assigned");
+            })
+          );
       }
     }
   }, [tasks, persist]);
@@ -712,7 +844,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         toast(
           /turned off/i.test(msg)
             ? tr("planPage.switchOff")
-            : /owner/i.test(msg)
+            : /owner|creator/i.test(msg)
               ? tr("planPage.switchOwner")
               : /function|schema cache/i.test(msg)
                 ? tr("planPage.switchMissing")
@@ -759,7 +891,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (r.action === "set_high") setTasks((ts) => ts.map((t) => (t.id === task.id ? { ...t, priority: "h" } : t)));
         if (r.action === "add_label" && r.param)
           setTasks((ts) => ts.map((t) => (t.id === task.id && !t.labels.includes(r.param!) ? { ...t, labels: [...t.labels, r.param!] } : t)));
-        if (r.action === "webhook")
+        // Real mode: the server posts rule webhooks (signed) and logs them; demo mode only logs here
+        if (r.action === "webhook" && !dbRef.current)
           setWebhookLog((l) => [{ id: nextId("wh"), at: Date.now(), url: r.param || "(no URL)", event: `${trigger}:${task.id}`, ok: !!r.param }, ...l].slice(0, 50));
       }
       setRules((rs) => rs.map((r) => (matching.some((m) => m.id === r.id) ? { ...r, runs: r.runs + 1 } : r)));
@@ -849,6 +982,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...data,
         id,
       };
+      // Demo mode numbers the task here; in real mode the database hands out the
+      // number and it arrives with the realtime update
+      if (!dbRef.current) task.number = nextTaskNumber(tasksRef.current);
+      else delete task.number;
       setTasks((ts) => [...ts, task]);
       setActivity((a) => ({ ...a, [id]: [{ id: nextId("a"), taskId: id, actor: "me", message: tr("store.taskCreatedBy", { name: meName() }), at: tr("time.justNow") }] }));
       setAudit((a) => [{ id: nextId("ev"), at: Date.now(), actor: "me" as MemberId, message: tr("store.auditCreated", { title: task.title }), taskId: id }, ...a]);
@@ -1287,16 +1424,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   }, [finalizeTracking, logActivity]);
 
-  const setVote = useCallback((v: number) => setVoteState(v), []);
-  const survey: Partial<Record<MemberId, number>> = { ak: 1, ba: 3, ...(vote !== null ? { me: vote } : {}) };
+  const setVote = useCallback(
+    (v: number) => {
+      setVoteState(v);
+      persist((r) => r.answerPulse(v));
+    },
+    [persist]
+  );
+  const survey: Partial<Record<MemberId, number>> = { ...teamSurvey, ...(vote !== null ? { me: vote } : {}) };
+
+  const setSla = useCallback(
+    (s: SlaTargets) => {
+      setSlaState(s);
+      persist((r) => r.updateSettings({ sla_high_days: s.h, sla_medium_days: s.m, sla_low_days: s.l }));
+    },
+    [persist]
+  );
 
   const can = useCallback((featureId: string) => hasFeature(plan, featureId), [plan]);
 
   // ---------- RBAC ----------
   // The plan decides which features exist; the role matrix decides who may use them.
-  const myRole: Member["role"] = members.me?.role ?? "Owner";
+  const myRole: Member["role"] = members.me?.role ?? "Admin";
+  const isCreator = creatorId === "me";
   const allowed = useCallback(
-    (key: PermissionKey) => viewAsRole === "Owner" || (!lockedForRole(viewAsRole, key) && !!permissions[viewAsRole]?.[key]),
+    (key: PermissionKey) => viewAsRole === "Admin" || (!lockedForRole(viewAsRole, key) && !!permissions[viewAsRole]?.[key]),
     [viewAsRole, permissions]
   );
 
@@ -1318,33 +1470,117 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [myRole, persist]
   );
 
-  // AI usage cap per plan (pricing.md "Limits per Tier")
-  const spendAi = useCallback(() => {
+  // AI usage cap per plan (pricing.md "Limits per Tier"). Real mode: the database
+  // counts per workspace per month and refuses past the cap (use_ai_action).
+  const spendAi = useCallback(async () => {
     const cap = PLANS[plan].aiPerMonth;
     if (aiUses >= cap) {
       toast(plan === "basic" ? tr("store.aiNeedsPro") : tr("store.aiLimit"));
       return false;
     }
-    setAiUses((n) => n + 1);
-    return true;
+    const db = dbRef.current;
+    if (!db) {
+      setAiUses((n) => n + 1);
+      return true;
+    }
+    try {
+      setAiUses(await db.useAiAction());
+      return true;
+    } catch (e) {
+      console.error("[ai]", e);
+      toast((e as Error).message === "AI_LIMIT" ? (plan === "basic" ? tr("store.aiNeedsPro") : tr("store.aiLimit")) : tr("store.saveFailed"));
+      return false;
+    }
   }, [plan, aiUses, toast]);
 
-  const addCustomField = useCallback((def: Omit<CustomFieldDef, "id">) => setCustomFields((f) => [...f, { ...def, id: nextId("cf") }]), []);
-  const removeCustomField = useCallback((id: string) => setCustomFields((f) => f.filter((x) => x.id !== id)), []);
-  const saveFilter = useCallback((name: string, query: string) => setSavedFilters((f) => [...f, { id: nextId("sf"), name, query }]), []);
-  const removeFilter = useCallback((id: string) => setSavedFilters((f) => f.filter((x) => x.id !== id)), []);
+  const geminiDrafts = useCallback(
+    async (action: "meeting" | "sentence", text: string) => {
+      const ws = workspaceIdRef.current;
+      if (!dbRef.current || !ws) return null;
+      const res = await aiDrafts(ws, action, text);
+      if (!res.ok || !res.data?.tasks) {
+        toast(res.status === 429 ? tr("store.aiLimit") : res.status === 403 ? tr("aiSettings.offToast") : res.status === 503 ? tr("aiSettings.notConfigured") : tr("aiPage.aiFailed"));
+        return null;
+      }
+      setAiUses((n) => n + 1);
+      return res.data.tasks;
+    },
+    [toast]
+  );
 
-  const saveTemplate = useCallback((name: string, projectId: ProjectId) => {
-    const ts = tasksRef.current.filter((t) => t.projectId === projectId);
-    setTemplates((tp) => [
-      ...tp,
-      {
+  const setAiEnabled = useCallback(
+    async (v: boolean) => {
+      const db = dbRef.current;
+      if (!db) {
+        setAiEnabledState(v);
+        return true;
+      }
+      try {
+        await db.updateSettings({ ai_enabled: v });
+        setAiEnabledState(v);
+        return true;
+      } catch (e) {
+        console.error("[ai opt-in]", e);
+        toast(tr("store.saveFailed"));
+        return false;
+      }
+    },
+    [toast]
+  );
+
+  const addCustomField = useCallback(
+    (def: Omit<CustomFieldDef, "id">) => {
+      const full = { ...def, id: nextId("cf") };
+      const position = customFieldsRef.current.length;
+      setCustomFields((f) => [...f, full]);
+      persist((r) => r.insertCustomField(full, position));
+    },
+    [persist]
+  );
+  const removeCustomField = useCallback(
+    (id: string) => {
+      setCustomFields((f) => f.filter((x) => x.id !== id));
+      persist((r) => r.deleteCustomField(id));
+    },
+    [persist]
+  );
+  const saveFilter = useCallback(
+    (name: string, query: string) => {
+      const f = { id: nextId("sf"), name, query };
+      setSavedFilters((list) => [...list, f]);
+      persist((r) => r.insertSavedFilter(f));
+    },
+    [persist]
+  );
+  const removeFilter = useCallback(
+    (id: string) => {
+      setSavedFilters((f) => f.filter((x) => x.id !== id));
+      persist((r) => r.deleteSavedFilter(id));
+    },
+    [persist]
+  );
+
+  const saveTemplate = useCallback(
+    (name: string, projectId: ProjectId) => {
+      const ts = tasksRef.current.filter((t) => t.projectId === projectId).slice(0, 100);
+      const tpl: TaskTemplate = {
         id: nextId("tpl"),
         name,
         tasks: ts.map((t) => ({ title: t.title, status: "todo", priority: t.priority, labels: t.labels, subtasks: t.subtasks.map((s) => s[0]) })),
-      },
-    ]);
-  }, []);
+      };
+      setTemplates((tp) => [...tp, tpl]);
+      persist((r) => r.insertTemplate(tpl));
+    },
+    [persist]
+  );
+  const removeTemplate = useCallback(
+    (id: string) => {
+      if (BUILT_IN_TEMPLATES.some((t) => t.id === id)) return;
+      setTemplates((tp) => tp.filter((t) => t.id !== id));
+      persist((r) => r.deleteTemplate(id));
+    },
+    [persist]
+  );
 
   const applyTemplate = useCallback(
     (templateId: string, projectId: ProjectId) => {
@@ -1393,6 +1629,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const runOverdueRules = useCallback(() => {
     const overdue = tasksRef.current.filter((t) => t.status !== "done" && t.dueOffset < 0);
     overdue.forEach((t) => runRules("overdue", t));
+    if (dbRef.current) overdue.slice(0, 20).forEach((t) => notifyServer(workspaceIdRef.current, t.id, "task.overdue"));
     return overdue.length;
   }, [runRules]);
 
@@ -1428,7 +1665,91 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     [persist]
   );
-  const setBranding = useCallback((b: Partial<Branding>) => setBrandingState((cur) => ({ ...cur, ...b })), []);
+  // Branding name / colour / custom domain are saved per workspace (Admin). The
+  // domain status is never saved from here: it comes from the server DNS check.
+  const setBranding = useCallback(
+    (b: Partial<Branding>) => {
+      setBrandingState((cur) => ({ ...cur, ...b }));
+      const patch: Parameters<Repo["updateSettings"]>[0] = {};
+      if (b.name !== undefined) patch.brand_name = b.name.trim() ? b.name.trim().slice(0, 60) : null;
+      if (b.color !== undefined && /^#[0-9a-fA-F]{6}$/.test(b.color)) patch.brand_color = b.color;
+      if (b.domain !== undefined) patch.custom_domain = b.domain || null;
+      if (Object.keys(patch).length) persistBranding(patch);
+    },
+    [persistBranding]
+  );
+
+  const saveDomain = useCallback(async (raw: string) => {
+    const domain = raw.trim().toLowerCase();
+    if (domain && !/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(domain)) return false;
+    setBrandingState((b) => ({ ...b, domain, domainStatus: domain ? "pending" : "none" }));
+    const db = dbRef.current;
+    if (!db) return true;
+    try {
+      await db.updateSettings({ custom_domain: domain || null });
+      return true;
+    } catch (e) {
+      console.error("[domain]", e);
+      return false;
+    }
+  }, []);
+
+  const checkDomain = useCallback(async () => {
+    if (!dbRef.current || !workspaceId) return null;
+    const res = await fetch("/api/domain/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspaceId }) });
+    if (!res.ok) return null;
+    const out = (await res.json()) as { verified: boolean; record: { name: string; value: string } };
+    setBrandingState((b) => ({ ...b, domainStatus: out.verified ? "verified" : "pending" }));
+    return out;
+  }, [workspaceId]);
+
+  const setDigestModeSaved = useCallback(
+    (v: boolean) => {
+      setDigestMode(v);
+      persist((r) => r.setDigestMode(v));
+    },
+    [persist]
+  );
+
+  const setTaskPrefix = useCallback(async (raw: string) => {
+    const prefix = raw.trim().toUpperCase();
+    if (!PREFIX_PATTERN.test(prefix)) return tr("board.keyInvalid");
+    const db = dbRef.current;
+    if (db) {
+      try {
+        await db.setTaskPrefix(prefix);
+      } catch (e) {
+        console.error("[task prefix]", e);
+        return tr("store.saveFailed");
+      }
+    }
+    setTaskPrefixState(prefix);
+    return null;
+  }, []);
+
+  const updateProfileDetails = useCallback(async (d: ProfileDetails) => {
+    const db = dbRef.current;
+    if (!db) return tr("store.profileDemo");
+    try {
+      await db.updateProfileDetails(d);
+    } catch {
+      return tr("store.nameFailed");
+    }
+    setProfile(d);
+    return null;
+  }, []);
+
+  const setAccountActive = useCallback(async (active: boolean) => {
+    const sb = getSupabase();
+    if (!sb || !dbRef.current) return false;
+    const { error } = await sb.rpc("set_my_account_active", { active });
+    if (error) {
+      console.error("[account]", error);
+      return false;
+    }
+    setDeactivated(!active);
+    return true;
+  }, []);
 
   const setDnd = useCallback((minutes: number | null) => setDndUntil(minutes ? Date.now() + minutes * 60000 : null), []);
   const toggleIntegration = useCallback((key: string) => setIntegrations((i) => ({ ...i, [key]: !i[key] })), []);
@@ -1571,6 +1892,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         clearAssigneeFilter,
         projects,
         addProject,
+        taskPrefix,
+        setTaskPrefix,
         getColumns,
         addColumn,
         moveColumn,
@@ -1637,12 +1960,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         vote,
         setVote,
         survey,
+        sla,
+        setSla,
         plan,
         setPlan,
         changePlan,
         can,
         aiUses,
         spendAi,
+        aiEnabled,
+        setAiEnabled,
+        geminiDrafts,
         customFields,
         addCustomField,
         removeCustomField,
@@ -1651,6 +1979,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         removeFilter,
         templates,
         saveTemplate,
+        removeTemplate,
         applyTemplate,
         rules,
         addRule,
@@ -1666,12 +1995,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         revokeShareLink,
         branding,
         setBranding,
+        saveDomain,
+        checkDomain,
+        domainRecord: branding.domain && domainToken ? { name: `_pulseboard.${branding.domain}`, value: `pulseboard-verify=${domainToken}` } : null,
         focusTaskId,
         setFocusTaskId,
         dndUntil,
         setDnd,
         digestMode,
-        setDigestMode,
+        setDigestMode: setDigestModeSaved,
         integrations,
         toggleIntegration,
         language,
@@ -1680,20 +2012,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setViewAsRole,
         canEdit: allowed("task.edit"),
         myRole,
+        creatorId,
+        isCreator,
         permissions,
         setPermission,
         resetPermissions,
         allowed,
         realMode,
+        workspaceId,
+        myUserId,
         workspaceName,
         myEmail,
         workspaceStatus,
         retryWorkspace,
-        twoFactor,
         taskSwitches,
         standups,
         postStandup,
-        setTwoFactor,
+        profile,
+        updateProfileDetails,
+        deactivated,
+        setAccountActive,
         exportData,
         importData,
         openTaskId,

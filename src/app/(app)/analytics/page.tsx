@@ -13,13 +13,12 @@ import { useT } from "@/i18n/I18nProvider";
 type Item = { title: string; module: string; assignee: string; priority: Priority; created: number; started?: number; completed?: number; est: number; actual: number };
 
 const TABS = ["Delivery", "Time", "Team", "Reports"] as const;
-const SLA_DEFAULT: Record<Priority, number> = { h: 3, m: 7, l: 14 };
 
 export default function Analytics() {
-  const { tasks, history, members, capacity, survey, projects, getColumns, columnLabel, openDrawer, toast, can } = useStore();
+  // SLA targets are a workspace setting (saved in real mode, 24_workspace-data)
+  const { tasks, history, members, capacity, survey, projects, getColumns, columnLabel, openDrawer, toast, can, sla, setSla, myRole } = useStore();
   const { t: tt, fmt } = useT();
   const [tab, setTab] = useState<(typeof TABS)[number]>("Delivery");
-  const [sla, setSla] = useState(SLA_DEFAULT);
 
   // One timeline of work items: past sprints (history) + the live board
   const items: Item[] = [
@@ -59,7 +58,9 @@ export default function Analytics() {
   const aging = [...open].sort((a, b) => b.createdDaysAgo - a.createdDaysAgo);
   const slaBreachesPast = done.filter((i) => i.started !== undefined && i.started - i.completed! > sla[i.priority]);
   const slaAtRisk = open.filter((t) => t.createdDaysAgo > sla[t.priority]);
-  const slaMet = done.length ? Math.round(((done.length - slaBreachesPast.length) / done.length) * 100) : 100;
+  // No finished work yet → no SLA result ("–"), not a flattering 100%
+  const slaMet = done.length ? Math.round(((done.length - slaBreachesPast.length) / done.length) * 100) : null;
+  const slaMetText = slaMet === null ? "–" : String(slaMet);
 
   const modules = Array.from(new Set(history.map((h) => h.module)));
   const byModule = modules.map((m) => {
@@ -82,7 +83,7 @@ export default function Analytics() {
       tt("an.wrHighlights"),
       tt("an.wrCompleted", { n: doneWeek.length, high: doneWeek.filter((i) => i.priority === "h").length }),
       tt("an.wrCycle", { n: avg(cycle) }),
-      tt("an.wrSla", { n: slaMet }),
+      tt("an.wrSla", { n: slaMetText }),
       "",
       tt("an.wrLowlights"),
       tt("an.wrOverdue", { n: open.filter((t) => t.dueOffset < 0).length }),
@@ -137,7 +138,7 @@ export default function Analytics() {
             </div>
             <div className="card">
               <p className="mute">{tt("an.slaMet")}</p>
-              <div className="stat" style={{ color: slaMet < 80 ? "var(--bad)" : undefined }}>{slaMet}%</div>
+              <div className="stat" style={{ color: slaMet !== null && slaMet < 80 ? "var(--bad)" : undefined }}>{slaMet === null ? "–" : `${slaMet}%`}</div>
               <p className="mute" style={{ fontSize: 12 }}>{tt("an.pastSla", { n: slaAtRisk.length })}</p>
             </div>
           </div>
@@ -193,7 +194,7 @@ export default function Analytics() {
                   {(["h", "m", "l"] as Priority[]).map((p) => (
                     <label key={p} className="inline">
                       {PRIORITY_LABEL[p]}
-                      <input type="number" min={1} style={{ width: 64 }} value={sla[p]} onChange={(e) => setSla({ ...sla, [p]: Math.max(1, Number(e.target.value)) })} />
+                      <input type="number" min={1} max={365} style={{ width: 64 }} value={sla[p]} disabled={myRole !== "Admin"} onChange={(e) => setSla({ ...sla, [p]: Math.min(365, Math.max(1, Number(e.target.value) || 1)) })} />
                       {tt("an.daysWord")}
                     </label>
                   ))}

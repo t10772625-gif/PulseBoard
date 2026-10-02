@@ -7,43 +7,27 @@ import { PRICING_FAQ, type FeatureStatus } from "@/lib/pricing";
 import { useT } from "@/i18n/I18nProvider";
 import PlanCards from "./PlanCards";
 import CompareTable, { StatusChip } from "./CompareTable";
-import LanguageSwitcher from "../LanguageSwitcher";
+import SiteHeader from "../site/SiteHeader";
+import SiteFooter from "../site/SiteFooter";
+import { useSiteSession } from "../site/useSiteSession";
 
 const SEAT_MIN = 1;
 const SEAT_MAX = 200;
 
 // Public pricing page. No checkout: billing isn't connected, so every call to
-// action leads to a Free sign-up and the page says so up front.
+// action leads to a Free sign-up (or, signed in, to Settings → Plan) and the page says so up front.
 export default function PricingView() {
-  const { loggedIn } = useStore();
+  const { plan, workspaceStatus } = useStore();
+  // Signed in (also when you open /pricing straight from the address bar): the cards
+  // show your current plan and link to Settings → Plan instead of sign-up
+  const loggedIn = useSiteSession();
+  const current = loggedIn && workspaceStatus === "ready" ? plan : undefined;
   const { t, rich } = useT();
   const [seats, setSeats] = useState(10);
 
   return (
     <div className="pr-page">
-      <header className="pr-nav">
-        <Link href={loggedIn ? "/dashboard" : "/pricing"} className="logo pr-logo" aria-label={t("pricing.homeLabel")}>
-          <b></b>
-          <span>PulseBoard</span>
-        </Link>
-        <nav aria-label={t("pricing.accountNav")}>
-          <LanguageSwitcher />
-          {loggedIn ? (
-            <Link className="btn sm" href="/settings/plan">
-              {t("pricing.yourPlan")}
-            </Link>
-          ) : (
-            <>
-              <Link className="ghost sm" href="/login">
-                {t("pricing.signIn")}
-              </Link>
-              <Link className="btn sm" href="/register">
-                {t("pricing.startFree")}
-              </Link>
-            </>
-          )}
-        </nav>
-      </header>
+      <SiteHeader />
 
       <section className="pr-hero">
         <p className="pr-kicker">{t("pricing.kicker")}</p>
@@ -71,7 +55,7 @@ export default function PricingView() {
         />
       </section>
 
-      <PlanCards seats={seats} mode="public" />
+      <PlanCards seats={seats} mode="public" signedIn={loggedIn} current={current} />
 
       <section className="pr-compare" aria-labelledby="pr-compare-h">
         <div className="pr-sec-head">
@@ -104,6 +88,7 @@ export default function PricingView() {
           {loggedIn ? t("pricing.openApp") : t("pricing.createWorkspace")} <ArrowRight size={18} aria-hidden className="pr-arrow" />
         </Link>
       </section>
+      <SiteFooter />
     </div>
   );
 }

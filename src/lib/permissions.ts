@@ -1,12 +1,14 @@
 import { Member } from "@/types";
 
 export type Role = Member["role"];
-export const ROLES: Role[] = ["Owner", "Admin", "Sub Admin", "Member", "Viewer"];
+// No separate Owner (2026-10-02, migration 21_simplify-roles): Admin is the top role.
+// The person who created the workspace is an Admin who can't be demoted or removed
+// and is the only one who controls billing ("creator" in the app, workspaces.created_by).
+export const ROLES: Role[] = ["Admin", "Sub Admin", "Member", "Viewer"];
 
 // One line per role for the Team page and the permissions page
 export const ROLE_INFO: Record<Role, string> = {
-  Owner: "Full control of the workspace, billing and every role. Can't be restricted.",
-  Admin: "Runs the workspace: people, boards, clients and what every role below can see and do.",
+  Admin: "Full control of the workspace: people, boards, clients and what every role below can see and do. Can't be restricted.",
   "Sub Admin": "Team lead (QA, HR, sales lead): manages boards, tasks and clients; pages chosen by the Admin.",
   Member: "Does the work: creates, updates and resolves tasks and bugs.",
   Viewer: "View only: sees the pages the Admin allows, can never change anything.",
@@ -49,8 +51,7 @@ export type PermissionMatrix = Record<Role, Record<PermissionKey, boolean>>;
 const all = (v: boolean) => Object.fromEntries(PERMISSIONS.map((p) => [p.key, v])) as Record<PermissionKey, boolean>;
 
 export const DEFAULT_PERMISSIONS: PermissionMatrix = {
-  // Owner always has everything; the matrix can't take it away
-  Owner: all(true),
+  // Admin always has everything; the matrix can't take it away
   Admin: all(true),
   "Sub Admin": {
     ...all(false),
@@ -122,23 +123,20 @@ export function pagePermissionFor(pathname: string): PermissionKey | null {
   return match ? PAGE_PERMISSION[match] : null;
 }
 
-// Who may change which rows of the matrix: Owner edits every role except Owner;
-// Admin edits Sub Admin, Member and Viewer (so an Admin can't raise their own rights
-// or another Admin's). Mirrors the role_permissions policy in migration 17.
+// Who may change which rows of the matrix: an Admin edits Sub Admin, Member and
+// Viewer. The Admin row is always full access and can't be edited. Mirrors the
+// role_permissions policy in migration 21_simplify-roles.
 export function canEditRole(editor: Role, target: Role): boolean {
-  if (target === "Owner") return false;
-  if (editor === "Owner") return true;
-  if (editor === "Admin") return target === "Sub Admin" || target === "Member" || target === "Viewer";
-  return false;
+  return editor === "Admin" && target !== "Admin";
 }
 
 // Viewer is view-only: only page permissions can ever be on (also enforced in has_permission)
 export const isPagePermission = (key: PermissionKey) => key.startsWith("page.");
 export const lockedForRole = (role: Role, key: PermissionKey) => role === "Viewer" && !isPagePermission(key);
 
-// Roles someone may hand out (invite or role change): only the Owner grants Admin
+// Roles someone may hand out (invite or role change): only an Admin grants Admin;
+// a Sub Admin / Member given member.manage can hand out the roles below Admin
 export function assignableRoles(editor: Role): Role[] {
-  if (editor === "Owner") return ["Admin", "Sub Admin", "Member", "Viewer"];
-  if (editor === "Admin") return ["Sub Admin", "Member", "Viewer"];
-  return [];
+  if (editor === "Admin") return ["Admin", "Sub Admin", "Member", "Viewer"];
+  return ["Sub Admin", "Member", "Viewer"];
 }

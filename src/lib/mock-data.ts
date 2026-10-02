@@ -17,7 +17,7 @@ import {
 } from "@/types";
 
 export const MEMBERS: Record<MemberId, Member> = {
-  me: { id: "me", name: "Ali Raza", initials: "AR", colorClass: "c1", role: "Owner" },
+  me: { id: "me", name: "Ali Raza", initials: "AR", colorClass: "c1", role: "Admin" },
   ak: { id: "ak", name: "Ayesha Khan", initials: "AK", colorClass: "c2", role: "Admin" },
   ba: { id: "ba", name: "Bilal Ahmed", initials: "BA", colorClass: "c3", role: "Member" },
   sm: { id: "sm", name: "Sara Malik", initials: "SM", colorClass: "c4", role: "Viewer" },

@@ -5,6 +5,8 @@ import { Member } from "@/types";
 import { assignableRoles } from "@/lib/permissions";
 import Dropdown from "./Dropdown";
 import Modal from "./Modal";
+import FieldError, { invalid } from "./FieldError";
+import { v, type FieldMsg } from "@/lib/validate";
 import { useT } from "@/i18n/I18nProvider";
 
 export default function InviteModal() {
@@ -23,11 +25,15 @@ function GrantAccess({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ email: string; role: Member["role"] } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [emailErr, setEmailErr] = useState<FieldMsg>(null);
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     const email = String(new FormData(e.currentTarget).get("email") ?? "").trim().toLowerCase();
+    const problem = v.email(email);
+    setEmailErr(problem);
+    if (problem) return;
     setBusy(true);
     const err = await addInvite(email, role);
     setBusy(false);
@@ -53,11 +59,12 @@ function GrantAccess({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       ) : (
-        <form onSubmit={submit} style={{ display: "grid", gap: 12 }}>
+        <form onSubmit={submit} style={{ display: "grid", gap: 12 }} noValidate>
           <p className="mute">{tt("invite.onlyNew")}</p>
           <label>
             {tt("common.email")}
-            <input name="email" dir="ltr" type="email" autoComplete="off" maxLength={254} required />
+            <input name="email" dir="ltr" type="email" autoComplete="off" maxLength={254} placeholder={tt("invite.emailPlaceholder")} required onInput={() => setEmailErr(null)} {...invalid("err-inv", emailErr)} />
+            <FieldError id="err-inv" msg={emailErr} />
           </label>
           <label>
             {tt("common.role")}

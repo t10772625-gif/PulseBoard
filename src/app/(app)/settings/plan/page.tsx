@@ -1,6 +1,5 @@
 "use client";
-import Link from "next/link";
-import { ArrowRight, Info } from "lucide-react";
+import { Info } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { PLANS } from "@/lib/plans";
 import SettingsHeader from "@/components/SettingsHeader";
@@ -32,9 +31,9 @@ export default function PlanSettings() {
   };
   const limits = PLANS[s.plan];
   const overBoards = counts.boards > limits.boards;
-  // Only the Owner may switch. Real mode saves it through the test_set_plan database
-  // function (Owner + server switch checked there too); no payment is taken.
-  const canSwitch = s.myRole === "Owner";
+  // Only the workspace creator may switch (billing). Real mode saves it through the
+  // test_set_plan database function (creator + server switch checked there too); no payment is taken.
+  const canSwitch = s.isCreator;
   const switchPlan = (p: Plan) => {
     if (s.realMode && !window.confirm(t("planPage.confirmSwitch", { plan: t(`plan.${p}`) }))) return;
     void s.changePlan(p);
@@ -45,11 +44,6 @@ export default function PlanSettings() {
       <SettingsHeader
         title={t("planPage.title")}
         hint={t("planPage.hint")}
-        actions={
-          <Link className="ghost" href="/pricing">
-            {t("planPage.publicLink")} <ArrowRight size={16} aria-hidden className="pr-arrow" />
-          </Link>
-        }
       />
 
       <section className="card st-plans" aria-labelledby="st-plans-h">

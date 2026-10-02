@@ -11,7 +11,7 @@ import { useT } from "@/i18n/I18nProvider";
 import type { MessageKey } from "@/i18n";
 
 // One colour per role for the overview (dot + bars)
-const ROLE_COLOR: Record<Role, string> = { Owner: "#12b5a0", Admin: "#3a86ff", "Sub Admin": "#9b6cff", Member: "#f0a400", Viewer: "#8ca3b4" };
+const ROLE_COLOR: Record<Role, string> = { Admin: "#12b5a0", "Sub Admin": "#9b6cff", Member: "#f0a400", Viewer: "#8ca3b4" };
 
 function Meter({ n, total }: { n: number; total: number }) {
   return (
@@ -32,9 +32,9 @@ const GROUPS: { id: string; title: MessageKey; hint: MessageKey }[] = [
   { id: "Workspace", title: "permPage.groupWorkspace", hint: "permPage.groupWorkspaceHint" },
 ];
 
-// Role-by-role permissions. Owner is always full access; only the Owner changes
-// Admin; an Admin controls Sub Admin, Member and Viewer. Viewer can only be given
-// pages. The same rules are enforced by the database (has_permission + RLS).
+// Role-by-role permissions. Admin is always full access and can't be edited; an
+// Admin controls Sub Admin, Member and Viewer. Viewer can only be given pages.
+// The same rules are enforced by the database (has_permission + RLS).
 export default function PermissionsPage() {
   const { permissions, setPermission, resetPermissions, myRole, allowed, realMode, toast, viewAsRole, setViewAsRole } = useStore();
   const { t } = useT();
@@ -44,7 +44,7 @@ export default function PermissionsPage() {
   const [role, setRole] = useState<Role>(ROLES.find((r) => canEditRole(myRole, r)) ?? "Member");
   const editable = canEditRole(myRole, role);
 
-  const lockReason = role === "Owner" ? t("permPage.lockOwner") : !editable ? t("permPage.lockOnlyOwner", { role: roleName(role) }) : null;
+  const lockReason = role === "Admin" ? t("permPage.lockAdmin") : !editable ? t("permPage.lockOnlyAdmin", { role: roleName(role) }) : null;
 
   return (
     <>
@@ -77,8 +77,8 @@ export default function PermissionsPage() {
                 const row = permissions[r];
                 const pageTotal = PERMISSIONS.filter((p) => p.group === "Pages").length;
                 const actionTotal = PERMISSIONS.filter((p) => p.group !== "Pages").length;
-                const pages = PERMISSIONS.filter((p) => p.group === "Pages" && (r === "Owner" || row[p.key])).length;
-                const actions = PERMISSIONS.filter((p) => p.group !== "Pages" && (r === "Owner" || row[p.key])).length;
+                const pages = PERMISSIONS.filter((p) => p.group === "Pages" && (r === "Admin" || row[p.key])).length;
+                const actions = PERMISSIONS.filter((p) => p.group !== "Pages" && (r === "Admin" || row[p.key])).length;
                 return (
                   <tr key={r} className={r === myRole ? "st-you" : ""} style={{ cursor: "default" }}>
                     <td>
@@ -97,7 +97,7 @@ export default function PermissionsPage() {
             </tbody>
           </table>
         </div>
-        {(myRole === "Owner" || myRole === "Admin") && (
+        {myRole === "Admin" && (
           <label className="st-field">
             {t("permPage.previewAs")}
             <Dropdown
@@ -175,7 +175,7 @@ export default function PermissionsPage() {
                   {items.map((p) => {
                     const key = p.key as PermissionKey;
                     const locked = lockedForRole(role, key);
-                    const on = role === "Owner" || (!locked && permissions[role][key]);
+                    const on = role === "Admin" || (!locked && permissions[role][key]);
                     return (
                       <SettingRow key={key} title={permLabel(key)}>
                         <Switch label={`${roleName(role)}: ${permLabel(key)}`} checked={on} disabled={!editable || locked} onChange={(v) => setPermission(role, key, v)} />

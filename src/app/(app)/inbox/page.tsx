@@ -12,7 +12,7 @@ export default function Inbox() {
 
   // Activity feed (COL-07): this session's changes first, then each task's history
   const feed = [
-    ...audit.map((a) => ({ id: a.id, taskId: a.taskId, text: `${members[a.actor].name}: ${a.message}`, when: fmt.time(a.at) })),
+    ...audit.map((a) => ({ id: a.id, taskId: a.taskId, text: `${members[a.actor]?.name ?? tt("ui.formerMember")}: ${a.message}`, when: fmt.time(a.at) })),
     ...Object.values(activity)
       .flat()
       .filter((e) => e.at && e.at !== "Just now" && e.at !== tt("time.justNow"))
@@ -38,7 +38,7 @@ export default function Inbox() {
               {tt("inbox.tabActivity")}
             </button>
           </div>
-          {tab === "notifications" && (
+          {tab === "notifications" && unread > 0 && (
             <button className="ghost" onClick={markAllRead}>
               {tt("inbox.markAll")}
             </button>

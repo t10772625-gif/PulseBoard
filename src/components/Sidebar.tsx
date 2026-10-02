@@ -12,17 +12,13 @@ import {
   LayoutDashboard,
   PanelLeftClose,
   PanelLeftOpen,
-  Plug,
-  Settings,
-  Sparkles,
   Sun,
   Users,
-  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import { useStore, health } from "@/lib/store";
 import { pagePermissionFor } from "@/lib/permissions";
-import { SETTINGS_PAGES } from "@/lib/settings-nav";
+import { AI_GROUP, AUTOMATION_GROUP, INTEGRATION_GROUP, SETTINGS_GROUP, type NavGroup } from "@/lib/nav-groups";
 import { useT } from "@/i18n/I18nProvider";
 import type { MessageKey } from "@/i18n";
 import { ProjectId } from "@/types";
@@ -38,14 +34,17 @@ const NAV: NavItem[] = [
   { href: "/team", icon: Users, labelKey: "nav.team", match: "/team" },
 ];
 
-const WORKSPACE: NavItem[] = [
-  { href: "/ai", icon: Sparkles, labelKey: "nav.ai", match: "/ai" },
+// Workspace section: plain links and groups (a group lists its sub-pages)
+const WORKSPACE: (NavItem | NavGroup)[] = [
+  AI_GROUP,
   { href: "/analytics", icon: BarChart3, labelKey: "nav.analytics", match: "/analytics" },
   { href: "/clients", icon: Briefcase, labelKey: "nav.clients", match: "/clients" },
-  { href: "/automations", icon: Workflow, labelKey: "nav.automations", match: "/automations" },
-  { href: "/integrations", icon: Plug, labelKey: "nav.integrations", match: "/integrations" },
+  AUTOMATION_GROUP,
+  INTEGRATION_GROUP,
   { href: "/archive", icon: Archive, labelKey: "nav.archive", match: "/archive" },
 ];
+const isGroup = (n: NavItem | NavGroup): n is NavGroup => "pages" in n;
+const inGroup = (pathname: string, g: NavGroup) => pathname === g.base || pathname.startsWith(g.base + "/");
 
 type Tip = { label: string; top: number; left: number };
 
@@ -54,24 +53,28 @@ export default function Sidebar() {
   const { tasks, notifications, projects, allowed, members, viewAsRole, workspaceName } = useStore();
   const { t } = useT();
   // RBAC: only show pages this role may open
-  const visible = (n: NavItem) => { const p = pagePermissionFor(n.href); return !p || allowed(p); };
+  const visible = (n: NavItem | NavGroup) => { const p = pagePermissionFor(isGroup(n) ? n.base : n.href); return !p || allowed(p); };
   const me = members.me;
   const unread = notifications.filter((n) => n.unread).length;
   const [collapsed, setCollapsed] = useState(false);
   // Rendered position: fixed so .side-scroll's overflow doesn't clip it
   const [tip, setTip] = useState<Tip | null>(null);
-  // Settings is a group, not a page: clicking it shows / hides its sub-pages.
-  // It opens by itself whenever you land on a settings page; after that the
-  // user's own toggle wins until the next navigation into settings.
-  const inSettings = pathname.startsWith("/settings");
-  const [settingsToggle, setSettingsToggle] = useState<boolean | null>(null);
+  // A group (AI, Automations, Integrations, Settings) is not a page: clicking it
+  // shows / hides its sub-pages. It opens by itself whenever you land on one of
+  // its pages; after that the user's own toggle wins until the next navigation
+  // into that group.
+  const [groupToggle, setGroupToggle] = useState<Record<string, boolean>>({});
   const [lastPath, setLastPath] = useState(pathname);
   if (lastPath !== pathname) {
     setLastPath(pathname);
-    if (inSettings) setSettingsToggle(null);
+    const entered = [...WORKSPACE, SETTINGS_GROUP].find((n): n is NavGroup => isGroup(n) && inGroup(pathname, n));
+    if (entered && entered.base in groupToggle) {
+      const rest = { ...groupToggle };
+      delete rest[entered.base];
+      setGroupToggle(rest);
+    }
   }
-  const settingsExpanded = settingsToggle ?? inSettings;
-  const settingsLabel = t("nav.settings");
+  const expanded = (g: NavGroup) => groupToggle[g.base] ?? inGroup(pathname, g);
 
   useEffect(() => {
     try {
@@ -128,6 +131,56 @@ export default function Sidebar() {
     );
   }
 
+  // Inside the Workspace <nav> a group is a <div>; Settings stands alone as its own <nav>
+  function renderGroup(g: NavGroup, Tag: "nav" | "div" = "div") {
+    const Icon = g.icon;
+    const label = t(g.labelKey);
+    const open = expanded(g);
+    const subId = `subnav-${g.base.slice(1)}`;
+    return (
+      <Tag key={g.base} className="nav-group">
+        <button
+          type="button"
+          className={`nav ${inGroup(pathname, g) ? "on-parent" : ""}`}
+          aria-expanded={open}
+          aria-controls={subId}
+          aria-label={label}
+          onClick={() => setGroupToggle((m) => ({ ...m, [g.base]: !open }))}
+          {...tipProps(label)}
+        >
+          <i>
+            <Icon size={18} strokeWidth={2} />
+          </i>
+          <span className="nav-label">{label}</span>
+          <ChevronDown size={14} className={`nav-chev ${open ? "open" : ""}`} aria-hidden />
+        </button>
+        {open && (
+          <div id={subId} className="nav-sub">
+            {g.pages.map((sp) => {
+              const SubIcon = sp.icon;
+              const subLabel = t(sp.labelKey);
+              return (
+                <Link
+                  key={sp.href}
+                  href={sp.href}
+                  className={`nav ${pathname === sp.href || pathname.startsWith(sp.href + "/") ? "on" : ""}`}
+                  aria-label={subLabel}
+                  aria-current={pathname === sp.href ? "page" : undefined}
+                  {...tipProps(subLabel)}
+                >
+                  <i>
+                    <SubIcon size={16} strokeWidth={2} />
+                  </i>
+                  <span className="nav-label">{subLabel}</span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </Tag>
+    );
+  }
+
   return (
     <aside className={`side ${collapsed ? "collapsed" : ""}`}>
       <button className="side-collapse" aria-label={collapsed ? t("nav.expand") : t("nav.collapse")} onClick={toggleCollapsed}>
@@ -141,49 +194,8 @@ export default function Sidebar() {
         <small>{t("nav.main")}</small>
         <nav id="mn">{NAV.filter(visible).map(renderItem)}</nav>
         {WORKSPACE.some(visible) && <small>{t("nav.workspace")}</small>}
-        <nav>{WORKSPACE.filter(visible).map(renderItem)}</nav>
-        {allowed("page.settings") && (
-          <nav className="nav-group">
-            <button
-              type="button"
-              className={`nav ${inSettings ? "on-parent" : ""}`}
-              aria-expanded={settingsExpanded}
-              aria-controls="settings-subnav"
-              aria-label={settingsLabel}
-              onClick={() => setSettingsToggle(!settingsExpanded)}
-              {...tipProps(settingsLabel)}
-            >
-              <i>
-                <Settings size={18} strokeWidth={2} />
-              </i>
-              <span className="nav-label">{settingsLabel}</span>
-              <ChevronDown size={14} className={`nav-chev ${settingsExpanded ? "open" : ""}`} aria-hidden />
-            </button>
-            {settingsExpanded && (
-              <div id="settings-subnav" className="nav-sub">
-                {SETTINGS_PAGES.map((sp) => {
-                  const Icon = sp.icon;
-                  const label = t(sp.labelKey);
-                  return (
-                    <Link
-                      key={sp.href}
-                      href={sp.href}
-                      className={`nav ${pathname === sp.href || pathname.startsWith(sp.href + "/") ? "on" : ""}`}
-                      aria-label={label}
-                      aria-current={pathname === sp.href ? "page" : undefined}
-                      {...tipProps(label)}
-                    >
-                      <i>
-                        <Icon size={16} strokeWidth={2} />
-                      </i>
-                      <span className="nav-label">{label}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </nav>
-        )}
+        <nav>{WORKSPACE.filter(visible).map((n) => (isGroup(n) ? renderGroup(n) : renderItem(n)))}</nav>
+        {visible(SETTINGS_GROUP) && renderGroup(SETTINGS_GROUP, "nav")}
         {allowed("page.projects") && <small>{t("nav.projects")}</small>}
         <nav className="plist" hidden={!allowed("page.projects")}>
           {(Object.keys(projects) as ProjectId[]).map((k) => {

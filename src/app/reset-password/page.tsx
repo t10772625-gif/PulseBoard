@@ -5,6 +5,8 @@ import { getSupabase, supabaseConfigured } from "@/lib/supabase/client";
 import { AuthHero } from "@/components/AuthHero";
 import { PasswordInput } from "@/components/PasswordInput";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import FieldError, { invalid } from "@/components/FieldError";
+import { v, type FieldMsg } from "@/lib/validate";
 import { useT } from "@/i18n/I18nProvider";
 
 // Reached from /auth/callback after a recovery link sets a session.
@@ -13,6 +15,7 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState<Record<string, FieldMsg>>({});
   const { t } = useT();
 
   useEffect(() => {
@@ -29,8 +32,9 @@ export default function Page() {
     const form = new FormData(e.currentTarget);
     const password = String(form.get("password") ?? "");
     const confirm = String(form.get("confirm") ?? "");
-    if (password.length < 8) return setError(t("reset.short"));
-    if (password !== confirm) return setError(t("reset.mismatch"));
+    const found = { password: v.password(password), confirm: v.same(password, confirm) };
+    setErrors(found);
+    if (found.password || found.confirm) return;
     setBusy(true);
     const { error } = await supabase.auth.updateUser({ password });
     if (error) {
@@ -46,13 +50,11 @@ export default function Page() {
   return (
     <section className="auth">
       <AuthHero
-        cardA={{ title: t("auth.loginCardA"), subtitle: t("auth.loginCardASub") }}
-        cardB={{ title: t("auth.cardB"), subtitle: t("auth.cardBSub") }}
         heading={t("reset.heroHeading")}
         description={t("reset.heroDesc")}
       />
       <div className="fw">
-        <form className="form" onSubmit={submit}>
+        <form className="form" onSubmit={submit} onInput={(e) => setErrors((x) => ({ ...x, [(e.target as HTMLInputElement).name]: null }))} noValidate>
           <div className="auth-lang">
             <LanguageSwitcher />
           </div>
@@ -82,11 +84,14 @@ export default function Page() {
             <>
               <label>
                 {t("profile.new")}
-                <PasswordInput name="password" autoComplete="new-password" minLength={8} required />
+                <PasswordInput name="password" autoComplete="new-password" minLength={8} maxLength={72} placeholder={t("auth.pwPlaceholderNew")} required {...invalid("err-password", errors.password)} />
+                <FieldError id="err-password" msg={errors.password} />
               </label>
+              <p className="mute auth-pw-hint">{t("auth.pwRules")}</p>
               <label>
                 {t("profile.confirm")}
-                <PasswordInput name="confirm" autoComplete="new-password" minLength={8} required />
+                <PasswordInput name="confirm" autoComplete="new-password" minLength={8} maxLength={72} placeholder={t("auth.pwPlaceholderConfirm")} required {...invalid("err-confirm", errors.confirm)} />
+                <FieldError id="err-confirm" msg={errors.confirm} />
               </label>
               {error && <p className="warn" role="alert">{error}</p>}
               <button className="btn" disabled={busy}>

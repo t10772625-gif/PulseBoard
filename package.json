@@ -9,22 +9,28 @@
     "lint": "eslint",
     "i18n:check": "node scripts/i18n-check.mjs",
     "i18n:test": "node --experimental-strip-types scripts/i18n-icu-test.mts",
-    "test:csv": "node --experimental-strip-types scripts/csv-safety-test.mts"
+    "test:csv": "node --experimental-strip-types scripts/csv-safety-test.mts",
+    "test:integrations": "node --experimental-strip-types scripts/integration-safety-test.mts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.117.2",
     "lucide-react": "^1.48.0",
     "next": "16.3.6",
+    "qrcode": "^1.5.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "xlsx": "^0.18.5"
+    "web-push": "^3.6.7",
+    "xlsx": "^0.18.5",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
     "tailwindcss": "^4",

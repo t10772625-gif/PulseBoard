@@ -12,7 +12,7 @@ export type Member = {
   name: string;
   initials: string;
   colorClass: "c1" | "c2" | "c3" | "c4";
-  role: "Owner" | "Admin" | "Sub Admin" | "Member" | "Viewer";
+  role: "Admin" | "Sub Admin" | "Member" | "Viewer";
 };
 
 export type Project = {
@@ -30,6 +30,8 @@ export type Energy = "high" | "low";
 
 export type Task = {
   id: string;
+  // Task number inside the workspace (PB-123 → 123); handed out by the database in real mode
+  number?: number;
   title: string;
   projectId: ProjectId;
   status: Status;
@@ -63,7 +65,8 @@ export type CustomFieldDef = { id: string; name: string; type: "text" | "number"
 
 export type SavedFilter = { id: string; name: string; query: string };
 
-export type TaskTemplate = { id: string; name: string; tasks: { title: string; status: Status; priority: Priority; labels: string[]; subtasks: string[] }[] };
+// builtIn = a starter template shipped with the app (not stored per workspace)
+export type TaskTemplate = { id: string; name: string; builtIn?: boolean; tasks: { title: string; status: Status; priority: Priority; labels: string[]; subtasks: string[] }[] };
 
 export type AutomationRule = {
   id: string;
@@ -101,7 +104,15 @@ export type Client = {
 
 export type ShareLink = { token: string; kind: "task" | "board"; targetId: string; createdAt: number; revoked: boolean };
 
+// domainStatus: "pending" = saved, DNS record not found yet; "verified" = the TXT record was found
+// by the server's live DNS check (it does not mean the app is served on that domain yet)
 export type Branding = { name: string; color: string; domain: string; domainStatus: "none" | "pending" | "verified" };
+
+// SLA target in days per priority (Analytics -> Delivery)
+export type SlaTargets = Record<Priority, number>;
+
+// Extra sign-up / profile answers
+export type ProfileDetails = { jobTitle: string; teamSize: string; useCase: string };
 
 export type WebhookDelivery = { id: string; at: number; url: string; event: string; ok: boolean };
 

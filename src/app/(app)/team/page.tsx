@@ -28,7 +28,7 @@ function heatColor(v: number) {
 }
 
 export default function Team() {
-  const { members, tasks, setMemberRole, vote, setVote, toast, openInviteModal, capacity, setCapacity, history, allowed, myRole, realMode, invites, refreshInvites, revokeInvite } = useStore();
+  const { members, tasks, setMemberRole, vote, setVote, toast, openInviteModal, capacity, setCapacity, history, allowed, myRole, realMode, invites, refreshInvites, revokeInvite, creatorId } = useStore();
   const canManage = allowed("member.manage");
   const { t: tt, fmt } = useT();
   // Mon–Fri names in the current language (5 Jan 2026 was a Monday)
@@ -114,6 +114,7 @@ export default function Team() {
                 <Avatar id={k} large />
                 <div>
                   <b>{members[k].name}</b>
+                  {k === creatorId && <span className="chip" style={{ marginInlineStart: 6 }} title={tt("team.creatorHint")}>{tt("team.creator")}</span>}
                   <br />
                   <Dropdown
                     value={members[k].role}
@@ -121,8 +122,9 @@ export default function Team() {
                       setMemberRole(k, role);
                       toast(tt("team.roleUpdated", { role: tt(`role.${role}`) }));
                     }}
-                    // Only the Owner grants or changes Owner/Admin; nobody changes their own role here
-                    disabled={!canManage || k === "me" || !assignableRoles(myRole).includes(members[k].role)}
+                    // Only an Admin grants or changes Admin; nobody changes their own role, and the
+                    // workspace creator's role can't be changed (same rules in the database)
+                    disabled={!canManage || k === "me" || k === creatorId || !assignableRoles(myRole).includes(members[k].role)}
                     options={(assignableRoles(myRole).includes(members[k].role) ? assignableRoles(myRole) : [members[k].role]).map((r) => ({ value: r, label: tt(`role.${r}`) }))}
                     triggerStyle={{ padding: "3px 8px", fontSize: 12, marginTop: 4, width: "auto" }}
                   />

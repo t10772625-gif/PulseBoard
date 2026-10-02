@@ -6,6 +6,8 @@ import { autoPriority, findDuplicates, smartMatch } from "@/lib/ai";
 import { MemberId, Priority, Status } from "@/types";
 import Modal from "./Modal";
 import Dropdown from "./Dropdown";
+import FieldError, { invalid } from "./FieldError";
+import { v, type FieldMsg } from "@/lib/validate";
 import { useT } from "@/i18n/I18nProvider";
 
 function defaultDueDate() {
@@ -18,6 +20,7 @@ export default function NewTaskModal() {
   const { newTaskDefaults, closeNewTaskModal, createTask, addAttachments, toast, members, getColumns, columnLabel, tasks, history, capacity, can, openDrawer, projects } = useStore();
   const { t: tt } = useT();
   const [title, setTitle] = useState("");
+  const [titleErr, setTitleErr] = useState<FieldMsg>(null);
   const [priority, setPriority] = useState<Priority>("m");
   const [assignee, setAssignee] = useState<MemberId>("me");
   const [status, setStatus] = useState<Status>("todo");
@@ -55,7 +58,9 @@ export default function NewTaskModal() {
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    if (!clean) return toast(tt("newTask.enterTitle"));
+    const problem = v.text(title, 2, 300);
+    setTitleErr(problem);
+    if (problem) return;
     const description = bug ? tt("newTask.bugTemplate", { steps: steps || "-", expected: expected || "-", actual: actual || "-" }) : "";
     const id = createTask({ projectId, status, title: clean, priority, assignee, dueOffset: offsetForDate(due), labels: bug ? ["Bug"] : ["New"], description, module: ap?.module });
     if (shots.length) addAttachments(id, shots);
@@ -65,7 +70,7 @@ export default function NewTaskModal() {
 
   return (
     <Modal title={bug ? tt("newTask.titleBug", { project: projects[projectId]?.name ?? "" }) : tt("newTask.titleTask", { project: projects[projectId]?.name ?? "" })} onClose={closeNewTaskModal}>
-      <form onSubmit={submit} style={{ display: "grid", gap: 14 }}>
+      <form onSubmit={submit} style={{ display: "grid", gap: 14 }} noValidate>
         <div className="tabs" style={{ justifySelf: "start" }}>
           <button type="button" className={!bug ? "on" : ""} onClick={() => setBug(false)}>
             {tt("newTask.tabTask")}
@@ -76,7 +81,8 @@ export default function NewTaskModal() {
         </div>
         <label>
           {tt("newTask.title")}
-          <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={bug ? tt("newTask.bugPlaceholder") : tt("newTask.taskPlaceholder")} />
+          <input autoFocus value={title} maxLength={300} onChange={(e) => (setTitle(e.target.value), setTitleErr(null))} placeholder={bug ? tt("newTask.bugPlaceholder") : tt("newTask.taskPlaceholder")} {...invalid("err-tt", titleErr)} />
+          <FieldError id="err-tt" msg={titleErr} />
         </label>
         {dups.length > 0 && (
           <div className="warn" style={{ textAlign: "start" }}>
@@ -98,16 +104,16 @@ export default function NewTaskModal() {
           <>
             <label>
               {tt("newTask.steps")}
-              <textarea rows={3} value={steps} onChange={(e) => setSteps(e.target.value)} placeholder={tt("newTask.stepsPlaceholder")} />
+              <textarea rows={3} value={steps} maxLength={3000} onChange={(e) => setSteps(e.target.value)} placeholder={tt("newTask.stepsPlaceholder")} />
             </label>
             <div className="f2">
               <label>
                 {tt("newTask.expected")}
-                <input value={expected} onChange={(e) => setExpected(e.target.value)} />
+                <input value={expected} maxLength={500} onChange={(e) => setExpected(e.target.value)} placeholder={tt("newTask.expectedPlaceholder")} />
               </label>
               <label>
                 {tt("newTask.actual")}
-                <input value={actual} onChange={(e) => setActual(e.target.value)} />
+                <input value={actual} maxLength={500} onChange={(e) => setActual(e.target.value)} placeholder={tt("newTask.actualPlaceholder")} />
               </label>
             </div>
             <label>

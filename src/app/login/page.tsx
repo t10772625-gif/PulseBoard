@@ -1,2 +1,11 @@
+import { Suspense } from "react";
 import AuthForm from "@/components/AuthForm";
-export default function Page() { return <AuthForm mode="login" />; }
+
+// useSearchParams (OAuth error / 2FA step) needs a Suspense boundary on a static page
+export default function Page() {
+  return (
+    <Suspense>
+      <AuthForm mode="login" />
+    </Suspense>
+  );
+}

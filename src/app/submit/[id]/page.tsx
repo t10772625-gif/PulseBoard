@@ -3,6 +3,8 @@ import { FormEvent, useState } from "react";
 import { useParams } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { autoPriority, findDuplicates, smartMatch } from "@/lib/ai";
+import FieldError, { invalid } from "@/components/FieldError";
+import { v, type FieldMsg } from "@/lib/validate";
 import { useT } from "@/i18n/I18nProvider";
 
 // Public bug / feedback form (SPEC #26, CLI-08): duplicate check, auto-priority,
@@ -18,10 +20,12 @@ export default function SubmitBug() {
   const project = projects[id];
   const dups = title.trim().length > 6 ? findDuplicates(title, tasks.filter((t) => t.projectId === id), undefined, 0.35) : [];
 
+  const [errors, setErrors] = useState<Record<string, FieldMsg>>({});
   function submit(e: FormEvent) {
     e.preventDefault();
-    if (!title.trim()) return;
-    if (email && !/^\S+@\S+\.\S+$/.test(email)) return;
+    const found = { title: v.text(title, 4, 300), details: v.maxLen(details, 3000), email: email.trim() ? v.email(email) : null };
+    setErrors(found);
+    if (found.title || found.details || found.email) return;
     const dup = dups[0];
     if (dup && dup.score >= 0.6) {
       addComment(dup.task.id, tt("submit.dupComment", { who: email || tt("submit.visitor"), text: details || title }));
@@ -59,11 +63,12 @@ export default function SubmitBug() {
           </button>
         </div>
       ) : (
-        <form className="card" onSubmit={submit} style={{ display: "grid", gap: 12 }}>
+        <form className="card" onSubmit={submit} style={{ display: "grid", gap: 12 }} noValidate>
           <h1>{tt("submit.title", { project: project.name })}</h1>
           <label>
             {tt("submit.what")}
-            <input required value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tt("submit.whatPlaceholder")} />
+            <input required value={title} maxLength={300} onChange={(e) => (setTitle(e.target.value), setErrors((x) => ({ ...x, title: null })))} placeholder={tt("submit.whatPlaceholder")} {...invalid("err-st", errors.title)} />
+            <FieldError id="err-st" msg={errors.title} />
           </label>
           {dups.length > 0 && (
             <p className="mute" style={{ fontSize: 13 }}>
@@ -72,11 +77,13 @@ export default function SubmitBug() {
           )}
           <label>
             {tt("submit.details")}
-            <textarea rows={4} value={details} onChange={(e) => setDetails(e.target.value)} />
+            <textarea rows={4} value={details} maxLength={3000} onChange={(e) => (setDetails(e.target.value), setErrors((x) => ({ ...x, details: null })))} placeholder={tt("submit.detailsPlaceholder")} {...invalid("err-sd", errors.details)} />
+            <FieldError id="err-sd" msg={errors.details} />
           </label>
           <label>
             {tt("submit.email")}
-            <input type="email" dir="ltr" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+            <input type="email" dir="ltr" value={email} maxLength={254} onChange={(e) => (setEmail(e.target.value), setErrors((x) => ({ ...x, email: null })))} placeholder={tt("auth.emailPlaceholder")} {...invalid("err-se", errors.email)} />
+            <FieldError id="err-se" msg={errors.email} />
           </label>
           <button className="btn">{tt("submit.send")}</button>
           <p className="mute" style={{ fontSize: 11 }}>{tt("submit.demo")}</p>

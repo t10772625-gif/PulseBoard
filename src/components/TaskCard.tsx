@@ -4,10 +4,12 @@ import { Trash2 } from "lucide-react";
 import { useStore, isBlocked } from "@/lib/store";
 import { Task } from "@/types";
 import { Avatar, DueLabel } from "./ui";
+import { taskKey } from "@/lib/task-keys";
 import { useT } from "@/i18n/I18nProvider";
 
 export default function TaskCard({ task }: { task: Task }) {
-  const { tasks, openDrawer, deleteTask, selectedIds, toggleSelect, canEdit, allowed } = useStore();
+  const { tasks, taskPrefix, openDrawer, deleteTask, selectedIds, toggleSelect, canEdit, allowed } = useStore();
+  const key = taskKey(task, taskPrefix);
   const { t: tt } = useT();
   const blocked = isBlocked(task, tasks);
   const doneSubs = task.subtasks.filter((s) => s[1]).length;
@@ -44,6 +46,7 @@ export default function TaskCard({ task }: { task: Task }) {
               onChange={() => toggleSelect(task.id)}
             />
           )}
+          {key && <b className="task-key">{key}</b>}
           {task.labels.map((l) => (
             <span key={l}>{l}</span>
           ))}
