@@ -24,7 +24,7 @@ export function useProjectPicker() {
   ) : (
     <div className="pp-picker">
       <span className="mute">{t("picker.noBoards")}</span>
-      {allowed("project.manage") && (
+      {allowed("project.create") && (
         <button className="ghost sm" onClick={openNewProjectModal}>
           {t("picker.createBoard")}
         </button>

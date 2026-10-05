@@ -4,7 +4,7 @@ import { isResponse, readBody, requireUser, safeError, uuid } from "@/lib/server
 import { MAX_DELIVERIES_PER_MINUTE, postToChat, recentDeliveries } from "@/lib/server/deliver";
 
 // "Send a test message" for one connected Slack / Discord channel. Needs
-// automation.manage (checked through the database, as the caller).
+// integration.edit (checked through the database, as the caller).
 
 const Body = z.object({ workspaceId: uuid, webhookId: uuid });
 
@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   if (isResponse(body)) return body;
   const { sb, user } = auth;
 
-  const { data: allowed } = await sb.rpc("has_permission", { ws: body.workspaceId, perm: "automation.manage" });
+  const { data: allowed } = await sb.rpc("has_permission", { ws: body.workspaceId, perm: "integration.edit" });
   if (allowed !== true) return safeError(403);
   const recent = await recentDeliveries(sb, user.id);
   if (recent === null) return safeError(500);

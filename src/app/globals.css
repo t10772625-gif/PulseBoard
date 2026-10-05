@@ -4132,3 +4132,108 @@ a.site-card:hover {
   width: 100%;
   margin-top: 4px;
 }
+
+/* ===== ux-: shared page-redesign kit (2026-10-02 UI overhaul) ===== */
+.ux-page { display: grid; gap: 16px; }
+.ux-hero { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;
+  background: radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--acc) 10%, transparent), transparent 60%), var(--card); }
+.ux-hero-main { flex: 1 1 320px; display: grid; gap: 6px; }
+.ux-hero-main h2 { margin: 0; font-size: 18px; }
+.ux-hero-main p { margin: 0; line-height: 1.55; }
+.ux-icon { display: grid; place-items: center; width: 48px; height: 48px; flex-shrink: 0;
+  border-radius: 14px; color: var(--acc2); background: var(--soft);
+  border: 1px solid color-mix(in srgb, var(--acc) 35%, var(--line)); }
+.ux-icon.sm { width: 36px; height: 36px; border-radius: 11px; }
+.ux-icon.warn { color: color-mix(in srgb, var(--warn) 75%, var(--ink)); background: color-mix(in srgb, var(--warn) 12%, transparent); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.ux-icon.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
+.ux-pills { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ux-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); counter-reset: ux; }
+.ux-steps li { counter-increment: ux; display: grid; gap: 4px; padding: 14px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--bg); font-size: 13.5px; }
+.ux-steps li::before { content: counter(ux); display: grid; place-items: center; width: 26px; height: 26px;
+  border-radius: 50%; background: var(--acc); color: #fff; font-weight: 800; font-size: 12px; }
+.ux-sec { display: grid; gap: 12px; }
+.ux-sec-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.ux-sec-head h2 { margin: 0; font-size: 17px; }
+.ux-sec-head .ux-pills { margin-inline-start: auto; }
+.ux-rows { display: grid; }
+.ux-rows > * + * { border-top: 1px solid var(--line); }
+.ux-form { display: grid; gap: 14px; }
+.ux-form-2 { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.ux-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; align-items: center; }
+.ux-inline { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.ux-inline > label { flex: 1 1 200px; }
+.ux-result { display: grid; gap: 10px; padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); }
+.ux-result + .ux-result { margin-top: 10px; }
+.ux-conf { font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--mute); }
+.ux-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; scrollbar-width: thin; }
+.ux-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.ux-table th { text-align: start; font-size: 12px; font-weight: 800; color: var(--mute); text-transform: uppercase;
+  letter-spacing: .04em; padding: 10px 12px; background: var(--col); white-space: nowrap; }
+.ux-table td { padding: 11px 12px; border-top: 1px solid var(--line); vertical-align: middle; }
+.ux-table tr:hover td { background: color-mix(in srgb, var(--acc) 5%, transparent); }
+.ux-danger { border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
+.ux-danger h2 { color: var(--bad); }
+.btn.ux-btn-bad { background: var(--bad); box-shadow: 0 6px 16px color-mix(in srgb, var(--bad) 30%, transparent); }
+.btn.ux-btn-bad:hover { background: color-mix(in srgb, var(--bad) 85%, var(--ink)); }
+.ux-tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.ux-tile { display: grid; gap: 2px; padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); }
+.ux-tile b { font-size: 20px; }
+.ux-card-col { display: flex; flex-direction: column; gap: 10px; }
+.ux-card-col .ux-foot { margin-top: auto; }
+.ux-card-top { display: flex; gap: 12px; align-items: center; }
+.ux-card-top b { font-size: 15px; line-height: 1.3; overflow-wrap: anywhere; }
+.ux-card-col p { margin: 0; }
+.ux-pills .plan-tag { margin-inline-start: 0; }
+@media (max-width: 760px) {
+  .ux-actions { justify-content: stretch; }
+  .ux-actions > .btn, .ux-actions > .ghost { flex: 1 1 auto; }
+  .ux-hero { padding: 16px; }
+}
+.ux-search { position: relative; display: block; }
+.ux-search svg { position: absolute; inset-inline-start: 12px; top: 50%; transform: translateY(-50%); color: var(--mute); pointer-events: none; }
+.ux-search input { padding-inline-start: 38px; }
+.ux-actor { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+/* Workspace logo (Settings → Branding) in place of the PulseBoard mark */
+.logo-img { width: 30px; height: 30px; flex-shrink: 0; border-radius: 9px; object-fit: contain; background: var(--card); }
+.side .logo-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* Settings → Branding: logo tile and live preview */
+.br-logo-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.br-logo-row .ux-actions { flex: 0 0 auto; }
+.br-logo-tile { display: grid; place-items: center; width: 64px; height: 64px; flex-shrink: 0; border-radius: 14px; border: 1px dashed var(--line); background: var(--bg); overflow: hidden; }
+.br-logo-tile img { width: 100%; height: 100%; object-fit: contain; }
+.br-default-mark { display: block; width: 36px; height: 36px; border-radius: 9px; background: url("/pulseboard-mark.svg") center / contain no-repeat; }
+.br-default-mark.sm { width: 16px; height: 16px; border-radius: 4px; }
+.br-preview { display: grid; gap: 12px; padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); }
+.br-tab { display: inline-flex; align-items: center; gap: 8px; justify-self: start; max-width: 100%; padding: 8px 14px; border-radius: 10px 10px 0 0; background: var(--card); border: 1px solid var(--line); border-bottom: 0; font-size: 12.5px; }
+.br-tab img { border-radius: 4px; object-fit: contain; }
+.br-tab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.br-side { display: grid; gap: 10px; padding: 16px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); }
+.br-side .logo { font-size: 17px; min-width: 0; }
+.br-side .logo-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.br-line { display: block; height: 10px; border-radius: 99px; background: var(--col); }
+.br-line.short { width: 60%; }
+/* Settings → AI: what is / isn't sent */
+.ais-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 13.5px; }
+.ais-list li { display: flex; gap: 8px; align-items: flex-start; }
+.ais-list svg { flex-shrink: 0; margin-top: 3px; }
+.ais-list .ok { color: var(--acc2); }
+.ais-list .no { color: var(--bad); }
+/* Settings → Roles & permissions: resource × action grid and role overview */
+.pm-grid td, .pm-ov td { vertical-align: top; }
+.pm-grid .pm-res { background: none; color: var(--ink); text-transform: none; letter-spacing: 0; font-size: 13.5px; font-weight: 800; white-space: nowrap; }
+.pm-cell { display: grid; gap: 8px; }
+.pm-sw { display: grid; justify-items: start; gap: 4px; }
+.pm-sw small { font-size: 11px; color: var(--mute); line-height: 1.3; max-width: 140px; }
+.pm-sw .pm-linked { color: color-mix(in srgb, var(--warn) 65%, var(--ink)); }
+.pm-rule { display: inline-block; font-size: 12px; font-weight: 700; color: var(--mute); max-width: 140px; line-height: 1.35; }
+.pm-yes, .pm-no { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 800; white-space: nowrap; }
+.pm-yes { color: var(--acc2); }
+.pm-no { color: var(--mute); }
+.pm-ov th .int-st { margin-inline-start: 4px; text-transform: none; letter-spacing: 0; }
+.pm-pages { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); column-gap: 24px; }
+.pm-pages .st-row { border-top: 1px solid var(--line); }
+.pm-pages .pm-page-group { grid-column: 1 / -1; }
+.pm-pages .pm-sub { padding-inline-start: 18px; gap: 10px; }
+.pm-pages .pm-sub span { font-size: 13.5px; }

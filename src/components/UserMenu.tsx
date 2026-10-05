@@ -9,7 +9,7 @@ import { Avatar } from "./ui";
 
 // Header account menu: who you are (name, role, email) and quick links.
 export default function UserMenu() {
-  const { members, myRole, myEmail, allowed, logout } = useStore();
+  const { members, myRole, myEmail, logout } = useStore();
   const { t } = useT();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -50,11 +50,9 @@ export default function UserMenu() {
           <Link role="menuitem" href="/profile" onClick={() => setOpen(false)}>
             <UserRound size={16} aria-hidden /> {t("userMenu.profile")}
           </Link>
-          {allowed("page.settings") && (
-            <Link role="menuitem" href="/settings" onClick={() => setOpen(false)}>
-              <Settings size={16} aria-hidden /> {t("userMenu.settings")}
-            </Link>
-          )}
+          <Link role="menuitem" href="/settings" onClick={() => setOpen(false)}>
+            <Settings size={16} aria-hidden /> {t("userMenu.settings")}
+          </Link>
           <button
             role="menuitem"
             onClick={async () => {

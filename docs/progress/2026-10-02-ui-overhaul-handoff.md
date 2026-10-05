@@ -28,26 +28,26 @@
 | 2 | Inbox | Show "Mark all as read" only when there are unread items. | ✅ DONE |
 | 3 | Settings → Plan | Remove the "Public pricing page" button inside the app. | ✅ DONE |
 | 4 | Empty state (global) | A designed no-data card, in the style of the loader. | ✅ DONE (component + CSS); rollout to more pages remains, see §3 |
-| 5 | No-boards popup (global) | One common modal when there are no boards, with a Create board button and a Close button (the user may just be looking around). | ✅ DONE, ⚠️ i18n keys missing |
-| 6 | Integrations → Apps | Plan/status badges stick to long names (e.g. "Zapier / Make / IFTTT"). | 🟡 STARTED, not edited yet |
-| 7 | Settings → Profile | Redesign. The role is shown in one card and asked again as "Your role" in another, which is confusing. | ❌ REMAINING |
-| 8 | Settings → Your data | Explain what it does, and redesign it. | ❌ REMAINING |
-| 9 | Settings → Audit log | Show it as a table. | ❌ REMAINING |
-| 10 | Settings → Branding | The page/browser title comes from the brand name. Each org can upload its own icon/logo, falling back to the PulseBoard name/icon. Everything should come from branding. | ❌ REMAINING |
-| 11 | Settings → Custom fields | Redesign. | ❌ REMAINING |
-| 12 | Settings → AI | Redesign. | ❌ REMAINING |
-| 13 | Settings → Security | Redesign. | ❌ REMAINING |
+| 5 | No-boards popup (global) | One common modal when there are no boards, with a Create board button and a Close button (the user may just be looking around). | ✅ DONE, keys added 2026-10-05 |
+| 6 | Integrations → Apps | Plan/status badges stick to long names (e.g. "Zapier / Make / IFTTT"). | ✅ BUILT 2026-10-05 (not browser-checked) |
+| 7 | Settings → Profile | Redesign. The role is shown in one card and asked again as "Your role" in another, which is confusing. | ✅ BUILT 2026-10-05 (not browser-checked) |
+| 8 | Settings → Your data | Explain what it does, and redesign it. | ✅ BUILT 2026-10-05 (not browser-checked) |
+| 9 | Settings → Audit log | Show it as a table. | ✅ BUILT 2026-10-05 (not browser-checked) |
+| 10 | Settings → Branding | The page/browser title comes from the brand name. Each org can upload its own icon/logo, falling back to the PulseBoard name/icon. Everything should come from branding. | ✅ BUILT 2026-10-05 (not browser-checked) (logo LOCAL-ONLY until migration 24) |
+| 11 | Settings → Custom fields | Redesign. | ✅ BUILT 2026-10-05 (not browser-checked) |
+| 12 | Settings → AI | Redesign. | ✅ BUILT 2026-10-05 (not browser-checked) |
+| 13 | Settings → Security | Redesign. | ✅ BUILT 2026-10-05 (not browser-checked) |
 | 14 | Settings → Roles & permissions | It shows 4 roles; the user expects 5, including Client Viewer. | ❌ NEEDS USER DECISION (DB role change) — explain only, don't implement |
-| 15 | Integrations → Import | Redesign, and explain the "Add board" button. | ❌ REMAINING |
-| 16 | Integrations → Calendar | Redesign. | ❌ REMAINING |
-| 17 | Integrations → GitHub | Redesign. | ❌ REMAINING |
-| 18 | Integrations → Email-to-task | Redesign. | ❌ REMAINING |
-| 19 | AI → Create | Redesign. | ❌ REMAINING |
-| 20 | AI → Suggestions | Explain what it does, and redesign. | ❌ REMAINING |
-| 21 | AI → Sprint planning | Explain what it does, and redesign. | ❌ REMAINING |
-| 22 | AI → Smart assign | Redesign. | ❌ REMAINING |
-| 23 | AI → Meeting scheduler | Spacing: the time dropdown and "Book it" are stuck together. Redesign. | ❌ REMAINING |
-| 24 | Day page | The "Autofill my day" and "Post update" buttons are small. | 🟡 Covered by the global button CSS; check the layout when screenshotting |
+| 15 | Integrations → Import | Redesign, and explain the "Add board" button. | ✅ BUILT 2026-10-05 (not browser-checked) |
+| 16 | Integrations → Calendar | Redesign. | ✅ BUILT 2026-10-05 (not browser-checked) |
+| 17 | Integrations → GitHub | Redesign. | ✅ BUILT 2026-10-05 (not browser-checked) |
+| 18 | Integrations → Email-to-task | Redesign. | ✅ BUILT 2026-10-05 (not browser-checked) |
+| 19 | AI → Create | Redesign. | ✅ BUILT 2026-10-05 (not browser-checked) |
+| 20 | AI → Suggestions | Explain what it does, and redesign. | ✅ BUILT 2026-10-05 (not browser-checked) |
+| 21 | AI → Sprint planning | Explain what it does, and redesign. | ✅ BUILT 2026-10-05 (not browser-checked) |
+| 22 | AI → Smart assign | Redesign. | ✅ BUILT 2026-10-05 (not browser-checked) |
+| 23 | AI → Meeting scheduler | Spacing: the time dropdown and "Book it" are stuck together. Redesign. | ✅ BUILT 2026-10-05 (not browser-checked) |
+| 24 | Day page | The "Autofill my day" and "Post update" buttons are small. | ✅ BUILT 2026-10-05 (not browser-checked) |
 
 ---
 
@@ -474,3 +474,16 @@ The danger card goes last: `.card.ux-sec.ux-danger` with `.ux-icon.bad`.
 2. `npm run i18n:check`.
 3. If the user wants screenshots: the demo-build flow (memory "Verify UI with demo build"), light + dark, desktop + 375px.
 4. **No `next build`** until the user says push.
+
+---
+
+## Correction (added 2026-10-05)
+
+Previous statement: "Branch `fixes-v1` · last commit `b9beaeb` · **everything below is uncommitted**."
+
+Why it was inaccurate: this work was committed in `4320e0d` and pushed to `origin/fixes-v1` after this file was written.
+
+Correct current understanding: items 1–4 are in `4320e0d`. Items 5–13 and 15–24 were finished on 2026-10-05
+(uncommitted). Item 14 is still waiting for the role-model decision. Details: `docs/progress/2026-10-05.md`.
+
+Evidence: `git log` (HEAD `4320e0d`), `git rev-list --left-right --count origin/fixes-v1...HEAD` = `0 0` on 2026-10-05.

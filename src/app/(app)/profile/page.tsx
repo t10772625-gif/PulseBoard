@@ -1,5 +1,7 @@
 "use client";
 import { FormEvent, useState } from "react";
+import Link from "next/link";
+import { ChevronRight, KeyRound, Languages, Lock, UserRound } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { getSupabase } from "@/lib/supabase/client";
 import { Avatar } from "@/components/ui";
@@ -10,11 +12,12 @@ import FieldError, { invalid } from "@/components/FieldError";
 import { v, type FieldMsg } from "@/lib/validate";
 import { useT } from "@/i18n/I18nProvider";
 
-// Your own account: name, email, role and workspace; change display name and password.
+// Your own account: who you are in this workspace (role shown once, in the header),
+// your personal details, your password, and links to the related settings.
 export default function ProfilePage() {
-  const { members, myRole, myEmail: email, workspaceName, realMode, updateMyName, toast, profile, updateProfileDetails, isCreator } = useStore();
+  const { members, myRole, myEmail: email, workspaceName, realMode, updateMyName, toast, profile, updateProfileDetails } = useStore();
   const me = members.me;
-  const { t, rich } = useT();
+  const { t } = useT();
 
   return (
     <>
@@ -25,82 +28,98 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {!realMode && (
-        <p className="warn" role="status" style={{ marginBottom: 14 }}>
-          {t("profile.demo")}
-        </p>
-      )}
+      <div className="ux-page">
+        {!realMode && (
+          <p className="st-demo-warn" role="status" style={{ margin: 0 }}>
+            <Lock size={14} aria-hidden /> {t("profile.demo")}
+          </p>
+        )}
 
-      <div className="grid g2">
-        <div className="card">
-          <div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 14 }}>
-            <Avatar id="me" large />
-            <div>
-              <b>{me?.name ?? t("common.you")}</b>
-              <p className="mute" dir="ltr">{email || "—"}</p>
+        <section className="card ux-hero" aria-labelledby="pf-name">
+          <Avatar id="me" large />
+          <div className="ux-hero-main">
+            <div className="ux-pills">
+              <span className="st-pill">{t(`role.${myRole}`)}</span>
+            </div>
+            <h2 id="pf-name">{me?.name ?? t("common.you")}</h2>
+            <p className="mute" dir="ltr" style={{ textAlign: "start" }}>
+              {email || "—"}
+            </p>
+            <p className="mute" style={{ fontSize: 13 }}>
+              {t(`roleInfo.${myRole}`)}
+            </p>
+          </div>
+        </section>
+
+        <div className="grid g2">
+          <section className="card ux-sec" aria-labelledby="pf-details">
+            <div className="ux-sec-head">
+              <span className="ux-icon sm" aria-hidden>
+                <UserRound size={18} />
+              </span>
+              <h2 id="pf-details">{t("profile.personal")}</h2>
+            </div>
+            <p className="mute" style={{ margin: 0, fontSize: 13 }}>
+              {t("profile.personalHint")}
+            </p>
+            <DetailsForm
+              key={`${me?.name}|${JSON.stringify(profile)}`}
+              initialName={me?.name ?? ""}
+              initial={profile}
+              disabled={!realMode}
+              onSaveName={updateMyName}
+              onSave={updateProfileDetails}
+              onSaved={() => toast(t("profile.detailsUpdated"))}
+            />
+          </section>
+
+          <section className="card ux-sec" aria-labelledby="pf-pw">
+            <div className="ux-sec-head">
+              <span className="ux-icon sm" aria-hidden>
+                <KeyRound size={18} />
+              </span>
+              <h2 id="pf-pw">{t("profile.changePassword")}</h2>
+            </div>
+            <p className="mute" style={{ margin: 0, fontSize: 13 }}>
+              {t("profile.passwordHint")}
+            </p>
+            <PasswordForm email={email} disabled={!realMode} onDone={() => toast(t("profile.pwUpdated"))} />
+          </section>
+        </div>
+
+        <section className="card ux-sec" aria-labelledby="pf-more">
+          <h2 id="pf-more" style={{ margin: 0, fontSize: 17 }}>
+            {t("profile.more")}
+          </h2>
+          <div className="ux-rows">
+            <div className="st-row">
+              <span className="st-ic" aria-hidden>
+                <Lock size={18} />
+              </span>
+              <div className="st-row-main">
+                <b>{t("profile.secRow")}</b>
+                <p className="mute">{t("profile.secRowHint")}</p>
+              </div>
+              <Link className="ghost sm" href="/settings/security">
+                {t("profile.open")} <ChevronRight size={14} aria-hidden className="flip-rtl" />
+              </Link>
+            </div>
+            <div className="st-row">
+              <span className="st-ic" aria-hidden>
+                <Languages size={18} />
+              </span>
+              <div className="st-row-main">
+                <b>{t("profile.langRow")}</b>
+                <p className="mute">{t("profile.langRowHint")}</p>
+              </div>
+              <Link className="ghost sm" href="/settings/language">
+                {t("profile.open")} <ChevronRight size={14} aria-hidden className="flip-rtl" />
+              </Link>
             </div>
           </div>
-          <p>
-            {rich("profile.role", { role: t(`role.${myRole}`) })}
-            {isCreator && <span className="chip" style={{ marginInlineStart: 6 }}>{t("team.creator")}</span>}
-          </p>
-          <p className="mute" style={{ marginBottom: 14 }}>
-            {t(`roleInfo.${myRole}`)}
-          </p>
-          <NameForm key={me?.name} initial={me?.name ?? ""} disabled={!realMode} onSave={updateMyName} onSaved={() => toast(t("profile.nameUpdated"))} />
-        </div>
-
-        <div className="card">
-          <h2>{t("profile.aboutYou")}</h2>
-          <DetailsForm key={JSON.stringify(profile)} initial={profile} disabled={!realMode} onSave={updateProfileDetails} onSaved={() => toast(t("profile.detailsUpdated"))} />
-        </div>
-
-        <div className="card">
-          <h2>{t("profile.changePassword")}</h2>
-          <PasswordForm email={email} disabled={!realMode} onDone={() => toast(t("profile.pwUpdated"))} />
-        </div>
+        </section>
       </div>
     </>
-  );
-}
-
-function NameForm({ initial, disabled, onSave, onSaved }: { initial: string; disabled: boolean; onSave: (n: string) => Promise<string | null>; onSaved: () => void }) {
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const { t } = useT();
-
-  const [nameErr, setNameErr] = useState<FieldMsg>(null);
-
-  async function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-    const name = String(new FormData(e.currentTarget).get("name") ?? "");
-    const problem = v.name(name);
-    setNameErr(problem);
-    if (problem) return;
-    setBusy(true);
-    const err = await onSave(name);
-    setBusy(false);
-    if (err) return setError(err);
-    onSaved();
-  }
-
-  return (
-    <form onSubmit={submit} style={{ display: "grid", gap: 10 }} noValidate>
-      <label>
-        {t("auth.fullName")}
-        <input name="name" defaultValue={initial} maxLength={80} autoComplete="name" placeholder={t("auth.namePlaceholder")} required disabled={disabled} onInput={() => setNameErr(null)} {...invalid("err-pname", nameErr)} />
-        <FieldError id="err-pname" msg={nameErr} />
-      </label>
-      {error && (
-        <p className="warn" role="alert">
-          {error}
-        </p>
-      )}
-      <button className="btn" disabled={busy || disabled} style={{ justifySelf: "start" }}>
-        {busy ? t("profile.saving") : t("profile.saveName")}
-      </button>
-    </form>
   );
 }
 
@@ -143,30 +162,34 @@ function PasswordForm({ email, disabled, onDone }: { email: string; disabled: bo
   }
 
   return (
-    <form onSubmit={submit} style={{ display: "grid", gap: 10 }} onInput={(e) => setErrors((x) => ({ ...x, [(e.target as HTMLInputElement).name]: null }))} noValidate>
+    <form className="ux-form" onSubmit={submit} onInput={(e) => setErrors((x) => ({ ...x, [(e.target as HTMLInputElement).name]: null }))} noValidate>
       <label>
         {t("profile.current")}
         <PasswordInput name="current" autoComplete="current-password" maxLength={72} placeholder={t("auth.pwPlaceholder")} required disabled={disabled} {...invalid("err-cur", errors.current)} />
         <FieldError id="err-cur" msg={errors.current} />
       </label>
-      <label>
-        {t("profile.new")}
-        <PasswordInput name="next" autoComplete="new-password" minLength={8} maxLength={72} placeholder={t("auth.pwPlaceholderNew")} required disabled={disabled} {...invalid("err-next", errors.next)} />
-        <FieldError id="err-next" msg={errors.next} />
-      </label>
-      <label>
-        {t("profile.confirm")}
-        <PasswordInput name="confirm" autoComplete="new-password" minLength={8} maxLength={72} placeholder={t("auth.pwPlaceholderConfirm")} required disabled={disabled} {...invalid("err-conf", errors.confirm)} />
-        <FieldError id="err-conf" msg={errors.confirm} />
-      </label>
+      <div className="ux-form-2">
+        <label>
+          {t("profile.new")}
+          <PasswordInput name="next" autoComplete="new-password" minLength={8} maxLength={72} placeholder={t("auth.pwPlaceholderNew")} required disabled={disabled} {...invalid("err-next", errors.next)} />
+          <FieldError id="err-next" msg={errors.next} />
+        </label>
+        <label>
+          {t("profile.confirm")}
+          <PasswordInput name="confirm" autoComplete="new-password" minLength={8} maxLength={72} placeholder={t("auth.pwPlaceholderConfirm")} required disabled={disabled} {...invalid("err-conf", errors.confirm)} />
+          <FieldError id="err-conf" msg={errors.confirm} />
+        </label>
+      </div>
       {error && (
         <p className="warn" role="alert">
           {error}
         </p>
       )}
-      <button className="btn" disabled={busy || disabled} style={{ justifySelf: "start" }}>
-        {busy ? t("auth.wait") : t("profile.update")}
-      </button>
+      <div className="ux-actions">
+        <button className="btn" disabled={busy || disabled}>
+          {busy ? t("auth.wait") : t("profile.update")}
+        </button>
+      </div>
     </form>
   );
 }
@@ -175,8 +198,26 @@ function PasswordForm({ email, disabled, onDone }: { email: string; disabled: bo
 const TEAM_SIZES = ["1", "2-10", "11-50", "51-200", "200+"] as const;
 const USE_CASES = ["software", "agency", "marketing", "operations", "personal", "other"] as const;
 
-function DetailsForm({ initial, disabled, onSave, onSaved }: { initial: ProfileDetails; disabled: boolean; onSave: (d: ProfileDetails) => Promise<string | null>; onSaved: () => void }) {
+// Name + job title + team size + use case in one form. The name and the details
+// are saved by their own existing calls; only what changed is sent.
+function DetailsForm({
+  initialName,
+  initial,
+  disabled,
+  onSaveName,
+  onSave,
+  onSaved,
+}: {
+  initialName: string;
+  initial: ProfileDetails;
+  disabled: boolean;
+  onSaveName: (n: string) => Promise<string | null>;
+  onSave: (d: ProfileDetails) => Promise<string | null>;
+  onSaved: () => void;
+}) {
   const { t } = useT();
+  const [name, setName] = useState(initialName);
+  const [nameErr, setNameErr] = useState<FieldMsg>(null);
   const [d, setD] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -184,35 +225,62 @@ function DetailsForm({ initial, disabled, onSave, onSaved }: { initial: ProfileD
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    const problem = v.name(name);
+    setNameErr(problem);
+    if (problem) return;
     setBusy(true);
-    const err = await onSave({ ...d, jobTitle: d.jobTitle.slice(0, 80) });
+    let err: string | null = null;
+    if (name.trim() !== initialName.trim()) err = await onSaveName(name);
+    if (!err && JSON.stringify(d) !== JSON.stringify(initial)) err = await onSave({ ...d, jobTitle: d.jobTitle.slice(0, 80) });
     setBusy(false);
     if (err) return setError(err);
     onSaved();
   }
 
   return (
-    <form onSubmit={submit} style={{ display: "grid", gap: 10 }}>
-      <label>
-        {t("auth.jobTitle")}
-        <input value={d.jobTitle} maxLength={80} placeholder={t("auth.jobPlaceholder")} disabled={disabled} onChange={(e) => setD({ ...d, jobTitle: e.target.value })} />
-      </label>
-      <label>
-        {t("auth.teamSize")}
-        <Dropdown value={d.teamSize} disabled={disabled} onChange={(v) => setD({ ...d, teamSize: v })} options={[{ value: "", label: t("auth.choose") }, ...TEAM_SIZES.map((v) => ({ value: v, label: t(`auth.team.${v}`) }))]} />
-      </label>
-      <label>
-        {t("auth.useCase")}
-        <Dropdown value={d.useCase} disabled={disabled} onChange={(v) => setD({ ...d, useCase: v })} options={[{ value: "", label: t("auth.choose") }, ...USE_CASES.map((v) => ({ value: v, label: t(`auth.use.${v}`) }))]} />
-      </label>
+    <form className="ux-form" onSubmit={submit} noValidate>
+      <div className="ux-form-2">
+        <label>
+          {t("auth.fullName")}
+          <input
+            name="name"
+            value={name}
+            maxLength={80}
+            autoComplete="name"
+            placeholder={t("auth.namePlaceholder")}
+            required
+            disabled={disabled}
+            onChange={(e) => {
+              setName(e.target.value);
+              setNameErr(null);
+            }}
+            {...invalid("err-pname", nameErr)}
+          />
+          <FieldError id="err-pname" msg={nameErr} />
+        </label>
+        <label>
+          {t("profile.jobTitle")}
+          <input value={d.jobTitle} maxLength={80} autoComplete="organization-title" placeholder={t("auth.jobPlaceholder")} disabled={disabled} onChange={(e) => setD({ ...d, jobTitle: e.target.value })} />
+        </label>
+        <label>
+          {t("auth.teamSize")}
+          <Dropdown value={d.teamSize} disabled={disabled} onChange={(x) => setD({ ...d, teamSize: x })} options={[{ value: "", label: t("auth.choose") }, ...TEAM_SIZES.map((x) => ({ value: x, label: t(`auth.team.${x}`) }))]} />
+        </label>
+        <label>
+          {t("auth.useCase")}
+          <Dropdown value={d.useCase} disabled={disabled} onChange={(x) => setD({ ...d, useCase: x })} options={[{ value: "", label: t("auth.choose") }, ...USE_CASES.map((x) => ({ value: x, label: t(`auth.use.${x}`) }))]} />
+        </label>
+      </div>
       {error && (
         <p className="warn" role="alert">
           {error}
         </p>
       )}
-      <button className="btn" disabled={disabled || busy}>
-        {busy ? t("auth.wait") : t("common.save")}
-      </button>
+      <div className="ux-actions">
+        <button className="btn" disabled={disabled || busy}>
+          {busy ? t("profile.saving") : t("profile.saveChanges")}
+        </button>
+      </div>
     </form>
   );
 }

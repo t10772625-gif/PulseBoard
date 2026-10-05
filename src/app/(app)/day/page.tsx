@@ -1,5 +1,6 @@
 "use client";
 import { DragEvent, useState } from "react";
+import { isMine } from "@/lib/permissions";
 import { useStore } from "@/lib/store";
 import { moduleName, taskModule } from "@/lib/ai";
 import { DueLabel } from "@/components/ui";
@@ -13,7 +14,7 @@ export default function MyDay() {
   const { t: tt, fmt } = useT();
 
   const scheduledIds = new Set(Object.values(daySchedule));
-  const mine = tasks.filter((t) => t.assignee === "me" && t.status !== "done" && !scheduledIds.has(t.id));
+  const mine = tasks.filter((t) => isMine(t) && t.status !== "done" && !scheduledIds.has(t.id));
   const plannedHours = Object.keys(daySchedule).length;
   const firstHour = Object.keys(daySchedule)
     .map(Number)
@@ -133,7 +134,7 @@ function DayExtras() {
   const [y, setY] = useState(standups.me?.yesterday ?? "");
   const [td, setTd] = useState(standups.me?.today ?? "");
   const [bl, setBl] = useState(standups.me?.blockers ?? "");
-  const mine = tasks.filter((t) => t.assignee === "me" && t.status !== "done");
+  const mine = tasks.filter((t) => isMine(t) && t.status !== "done");
   const batches = Object.entries(
     mine.reduce<Record<string, typeof mine>>((acc, t) => {
       const m = taskModule(t);
@@ -160,9 +161,11 @@ function DayExtras() {
           <p className="mute" style={{ fontSize: 13, marginBottom: 8 }}>
             {tt("day.energyHint")}
           </p>
-          <button className="btn sm" onClick={planByEnergy}>
-            {tt("day.autoFill")}
-          </button>
+          <div className="ux-actions">
+            <button className="btn" onClick={planByEnergy}>
+              {tt("day.autoFill")}
+            </button>
+          </div>
         </Gate>
       </div>
       <div className="card">
@@ -193,16 +196,18 @@ function DayExtras() {
             <input placeholder={tt("day.yesterday")} value={y} onChange={(e) => setY(e.target.value)} />
             <input placeholder={tt("day.today")} value={td} onChange={(e) => setTd(e.target.value)} />
             <input placeholder={tt("day.blockers")} value={bl} onChange={(e) => setBl(e.target.value)} />
-            <button
-              className="btn sm"
-              onClick={() => {
-                if (!td.trim()) return toast(tt("day.addToday"));
-                postStandup({ yesterday: y, today: td, blockers: bl });
-                toast(tt("day.posted"));
-              }}
-            >
-              {tt("day.post")}
-            </button>
+            <div className="ux-actions">
+              <button
+                className="btn"
+                onClick={() => {
+                  if (!td.trim()) return toast(tt("day.addToday"));
+                  postStandup({ yesterday: y, today: td, blockers: bl });
+                  toast(tt("day.posted"));
+                }}
+              >
+                {tt("day.post")}
+              </button>
+            </div>
           </div>
           <div className="ai-out">
             {(Object.keys(standups) as (keyof typeof standups)[]).map((m) => {

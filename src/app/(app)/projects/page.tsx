@@ -18,7 +18,7 @@ export default function Projects() {
           <h1>{tt("nav.projects")}</h1>
           <p className="mute">{tt("projects.count", { n: ids.length })}</p>
         </div>
-        {allowed("project.manage") && (
+        {allowed("project.create") && (
           <button className="btn" onClick={openNewProjectModal}>
             ＋ {tt("projects.new")}
           </button>
@@ -28,9 +28,9 @@ export default function Projects() {
         {ids.length === 0 && (
           <EmptyState
             title={tt("dash.noProjects")}
-            message={allowed("project.manage") ? tt("projects.emptyManage") : tt("projects.emptyView")}
+            message={allowed("project.create") ? tt("projects.emptyManage") : tt("projects.emptyView")}
             action={
-              allowed("project.manage") ? (
+              allowed("project.create") ? (
                 <button className="btn" onClick={openNewProjectModal}>
                   ＋ {tt("projects.new")}
                 </button>

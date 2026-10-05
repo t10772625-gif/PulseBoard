@@ -1,7 +1,8 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import QRCode from "qrcode";
-import { Check, Circle, Info, Laptop, LogOut, Monitor, Plus, ShieldCheck, Smartphone, TriangleAlert } from "lucide-react";
+import { Check, ChevronRight, Circle, Info, KeyRound, Laptop, LogOut, Monitor, MonitorSmartphone, Plus, ShieldCheck, Smartphone, TriangleAlert } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { getSupabase } from "@/lib/supabase/client";
 import { Switch } from "@/components/ui";
@@ -103,14 +104,19 @@ export default function SecuritySettings() {
 
   // ---- Signed-in devices ----
   const [sessions, setSessions] = useState<Session[] | null>(null);
+  // The device list needs a database function from the account-security update (23);
+  // until it exists the list can't load, and the page says so instead of showing nothing
+  const [sessionsUnavailable, setSessionsUnavailable] = useState(false);
   const loadSessions = useCallback(async () => {
     if (!sb) return;
     const { data, error } = await sb.rpc("list_my_sessions");
     if (error) {
       console.error("[sessions]", error);
+      setSessionsUnavailable(true);
       setSessions([]);
       return;
     }
+    setSessionsUnavailable(false);
     setSessions(data as Session[]);
   }, [sb]);
 
@@ -154,6 +160,10 @@ export default function SecuritySettings() {
   const level = score >= 85 ? "strong" : score >= 55 ? "good" : score >= 35 ? "fair" : "weak";
   const tip = !twoFactorOn ? t("security.tip2fa") : t("security.tipDone");
   const when = (iso: string) => fmt.date(new Date(iso), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  // Demo mode (or a database without the device list) shows only this browser
+  const deviceRows: Session[] = live && !sessionsUnavailable
+    ? sessions ?? []
+    : [{ id: "this", created_at: new Date().toISOString(), last_active: new Date().toISOString(), user_agent: typeof navigator === "undefined" ? "" : navigator.userAgent, ip: null, aal: "aal1", current: true }];
 
   return (
     <>
@@ -175,118 +185,193 @@ export default function SecuritySettings() {
           <p className="mute st-note">{t("security.scoreNoteReal")}</p>
         </section>
 
-        <section className="card" aria-labelledby="st-2fa-h">
-          <h2 id="st-2fa-h">{t("security.twoFactor")}</h2>
-          <div className="st-row">
-            <span className="st-ic" aria-hidden>
-              <ShieldCheck size={18} />
-            </span>
-            <div className="st-row-main">
-              <b>{t("security.authApp")}</b>
-              <p className="mute">{twoFactorOn ? t("security.twoFactorOnReal") : t("security.twoFactorOffHint")}</p>
-            </div>
-            <Switch
-              label={t("security.twoFactor")}
-              checked={twoFactorOn || !!setup}
-              disabled={!live || busy}
-              onChange={(v) => {
-                if (v) void startSetup();
-                else if (setup) setSetup(null);
-                else void turnOff();
-              }}
-            />
-          </div>
-          {!live && (
-            <p className="st-demo-warn">
-              <TriangleAlert size={14} aria-hidden /> {t("security.demoOnly2fa")}
-            </p>
-          )}
-          {setup && (
-            <div className="ai-out st-mfa-setup">
-              {/* eslint-disable-next-line @next/next/no-img-element -- data: URL generated locally */}
-              <img src={setup.qr} alt={t("security.qrAlt")} width={180} height={180} />
-              <div>
-                <p style={{ fontSize: 13 }}>{t("security.scanQr")}</p>
-                <p className="mute" style={{ fontSize: 12, marginTop: 6 }}>
-                  {t("security.orKey")}
-                </p>
-                <p className="code" style={{ margin: "4px 0 10px", wordBreak: "break-all" }} dir="ltr">
-                  {setup.secret}
-                </p>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="123456" dir="ltr" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} />
-                  <button className="btn sm" disabled={busy} onClick={confirmSetup}>
-                    {t("security.verify")}
-                  </button>
-                </div>
+        <div className="ux-page">
+          <section className="card ux-sec" aria-labelledby="st-2fa-h">
+            <div className="ux-sec-head">
+              <span className="ux-icon sm" aria-hidden>
+                <ShieldCheck size={18} />
+              </span>
+              <h2 id="st-2fa-h">{t("security.twoFactor")}</h2>
+              <div className="ux-pills">
+                {!live ? (
+                  <span className="int-st setup">{t("security.stDemo")}</span>
+                ) : twoFactorOn ? (
+                  <span className="int-st connected">{t("security.stOn")}</span>
+                ) : (
+                  <span className="int-st">{t("security.stOff")}</span>
+                )}
               </div>
             </div>
-          )}
-
-          <div className="st-card-head" style={{ marginTop: 22 }}>
-            <h2 style={{ margin: 0 }}>{t("security.sessions")}</h2>
-            <button className="ghost sm" onClick={showAddDevice} aria-expanded={!!addQr}>
-              <Plus size={14} aria-hidden /> {t("security.addDevice")}
-            </button>
-          </div>
-          {addQr && (
-            <div className="ai-out st-mfa-setup">
-              {/* eslint-disable-next-line @next/next/no-img-element -- data: URL generated locally */}
-              <img src={addQr} alt={t("security.addQrAlt")} width={160} height={160} />
-              <div>
-                <p style={{ fontSize: 13 }}>{t("security.addSteps")}</p>
-                <button
-                  className="ghost sm"
-                  style={{ marginTop: 8 }}
-                  onClick={() => {
-                    void navigator.clipboard?.writeText(`${window.location.origin}/login`);
-                    s.toast(t("security.linkCopied"));
+            <div className="ux-rows">
+              <div className="st-row">
+                <div className="st-row-main">
+                  <b>{t("security.authApp")}</b>
+                  <p className="mute">{twoFactorOn ? t("security.twoFactorOnReal") : t("security.twoFactorOffHint")}</p>
+                </div>
+                <Switch
+                  label={t("security.twoFactor")}
+                  checked={twoFactorOn || !!setup}
+                  disabled={!live || busy}
+                  onChange={(v) => {
+                    if (v) void startSetup();
+                    else if (setup) setSetup(null);
+                    else void turnOff();
                   }}
-                >
-                  {t("security.copyLink")}
+                />
+              </div>
+            </div>
+            {!live && (
+              <p className="st-demo-warn" style={{ margin: 0 }}>
+                <TriangleAlert size={14} aria-hidden /> {t("security.demoOnly2fa")}
+              </p>
+            )}
+            {setup && (
+              <div className="ux-result st-mfa-setup">
+                {/* eslint-disable-next-line @next/next/no-img-element -- data: URL generated locally */}
+                <img src={setup.qr} alt={t("security.qrAlt")} width={180} height={180} />
+                <div className="ux-form">
+                  <p style={{ fontSize: 13, margin: 0 }}>{t("security.scanQr")}</p>
+                  <div>
+                    <p className="mute" style={{ fontSize: 12, margin: 0 }}>
+                      {t("security.orKey")}
+                    </p>
+                    <p className="code" style={{ margin: "4px 0 0", wordBreak: "break-all" }} dir="ltr">
+                      {setup.secret}
+                    </p>
+                  </div>
+                  <div className="ux-inline">
+                    <label>
+                      {t("security.codeLabel")}
+                      <input inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="123456" dir="ltr" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} />
+                    </label>
+                    <button className="btn" disabled={busy} onClick={confirmSetup}>
+                      {t("security.verify")}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="card ux-sec" aria-labelledby="st-dev-h">
+            <div className="ux-sec-head">
+              <span className="ux-icon sm" aria-hidden>
+                <MonitorSmartphone size={18} />
+              </span>
+              <h2 id="st-dev-h">{t("security.sessions")}</h2>
+              <div className="ux-pills">
+                <button className="ghost sm" onClick={showAddDevice} aria-expanded={!!addQr}>
+                  <Plus size={14} aria-hidden /> {t("security.addDevice")}
                 </button>
               </div>
             </div>
-          )}
-
-          <div className="st-list">
-            {live && sessions === null && <p className="mute">{t("security.loadingSessions")}</p>}
-            {(live ? sessions ?? [] : [{ id: "this", created_at: new Date().toISOString(), last_active: new Date().toISOString(), user_agent: typeof navigator === "undefined" ? "" : navigator.userAgent, ip: null, aal: "aal1", current: true }]).map((d) => {
-              const dev = deviceName(d.user_agent);
-              const Icon = dev.mobile ? Smartphone : d.current ? Monitor : Laptop;
-              return (
-                <div key={d.id} className="st-row">
-                  <span className="st-ic" aria-hidden>
-                    <Icon size={18} />
-                  </span>
-                  <div className="st-row-main">
-                    <b>{dev.name || t("security.unknownDevice")}</b>
-                    <p className="mute">
-                      {t("security.lastActive", { when: when(d.last_active) })}
-                      {d.ip ? ` · ${d.ip}` : ""}
-                      {d.aal === "aal2" ? ` · ${t("security.with2fa")}` : ""}
-                    </p>
-                  </div>
-                  {d.current ? (
-                    <span className="st-pill">{t("common.current")}</span>
-                  ) : (
-                    <button className="ghost sm" onClick={() => signOutSession(d.id)}>
-                      <LogOut size={14} aria-hidden /> {t("security.signOutDevice")}
+            {addQr && (
+              <div className="ux-result st-mfa-setup">
+                {/* eslint-disable-next-line @next/next/no-img-element -- data: URL generated locally */}
+                <img src={addQr} alt={t("security.addQrAlt")} width={160} height={160} />
+                <div className="ux-form">
+                  <p style={{ fontSize: 13, margin: 0 }}>{t("security.addSteps")}</p>
+                  <div>
+                    <button
+                      className="ghost sm"
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(`${window.location.origin}/login`);
+                        s.toast(t("security.linkCopied"));
+                      }}
+                    >
+                      {t("security.copyLink")}
                     </button>
-                  )}
+                  </div>
                 </div>
-              );
-            })}
-          </div>
-          {live && (sessions?.length ?? 0) > 1 && (
-            <button className="ghost sm danger" style={{ marginTop: 10 }} onClick={signOutOthers}>
-              {t("security.signOutOthers")}
-            </button>
-          )}
-          <p className="mute st-foot">
-            <Info size={14} aria-hidden /> {live ? t("security.sessionsNoteReal") : t("security.sessionsNote")}
-          </p>
-        </section>
+              </div>
+            )}
+            {live && sessionsUnavailable && (
+              <p className="st-demo-warn" style={{ margin: 0 }}>
+                <Info size={14} aria-hidden /> {t("security.sessionsNeedUpdate")}
+              </p>
+            )}
+            {live && sessions === null ? (
+              <p className="mute" style={{ margin: 0 }}>
+                {t("security.loadingSessions")}
+              </p>
+            ) : deviceRows.length ? (
+              <div className="ux-table-wrap">
+                <table className="ux-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">{t("security.colDevice")}</th>
+                      <th scope="col">{t("security.colLastActive")}</th>
+                      <th scope="col" style={{ textAlign: "end" }}>
+                        {t("security.colAction")}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deviceRows.map((d) => {
+                      const dev = deviceName(d.user_agent);
+                      const Icon = dev.mobile ? Smartphone : d.current ? Monitor : Laptop;
+                      return (
+                        <tr key={d.id}>
+                          <td>
+                            <span className="ux-actor">
+                              <Icon size={16} aria-hidden /> <b>{dev.name || t("security.unknownDevice")}</b>
+                            </span>
+                            {(d.ip || d.aal === "aal2") && (
+                              <p className="mute" style={{ fontSize: 12, margin: "2px 0 0" }}>
+                                {d.ip ? <span dir="ltr">{d.ip}</span> : null}
+                                {d.ip && d.aal === "aal2" ? " · " : ""}
+                                {d.aal === "aal2" ? t("security.with2fa") : ""}
+                              </p>
+                            )}
+                          </td>
+                          <td className="mute" style={{ whiteSpace: "nowrap" }}>
+                            {when(d.last_active)}
+                          </td>
+                          <td style={{ textAlign: "end" }}>
+                            {d.current ? (
+                              <span className="st-pill">{t("common.current")}</span>
+                            ) : (
+                              <button className="ghost sm" onClick={() => signOutSession(d.id)}>
+                                <LogOut size={14} aria-hidden /> {t("security.signOutDevice")}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+            {live && (sessions?.length ?? 0) > 1 && (
+              <div className="ux-actions">
+                <button className="ghost danger" onClick={signOutOthers}>
+                  <LogOut size={16} aria-hidden /> {t("security.signOutOthers")}
+                </button>
+              </div>
+            )}
+            <p className="mute st-foot" style={{ marginTop: 0 }}>
+              <Info size={14} aria-hidden /> {live ? t("security.sessionsNoteReal") : t("security.sessionsNote")}
+            </p>
+          </section>
+
+          <section className="card" aria-labelledby="st-pw-h">
+            <div className="st-row" style={{ padding: 0 }}>
+              <span className="ux-icon sm" aria-hidden>
+                <KeyRound size={18} />
+              </span>
+              <div className="st-row-main">
+                <h2 id="st-pw-h" style={{ margin: 0, fontSize: 17 }}>
+                  {t("security.passwordTitle")}
+                </h2>
+                <p className="mute">{hasPassword ? t("security.passwordHint") : t("security.passwordNone")}</p>
+              </div>
+              <Link className="ghost sm" href="/profile">
+                {t("security.passwordChange")} <ChevronRight size={14} aria-hidden className="flip-rtl" />
+              </Link>
+            </div>
+          </section>
+        </div>
       </div>
     </>
   );

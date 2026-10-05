@@ -45,6 +45,12 @@ create table if not exists public.workspace_settings (
   workspace_id uuid primary key references public.workspaces (id) on delete cascade,
   brand_name text check (char_length(brand_name) <= 60),
   brand_color text check (brand_color ~ '^#[0-9a-fA-F]{6}$'),
+  -- Small workspace logo as a data URL: PNG / JPEG / WebP only (never SVG), ~200 KB max.
+  -- Same rule as src/lib/branding.ts isSafeLogo().
+  brand_logo text check (
+    char_length(brand_logo) <= 280000
+    and brand_logo ~ '^data:image/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$'
+  ),
   sla_high_days int not null default 3 check (sla_high_days between 1 and 365),
   sla_medium_days int not null default 7 check (sla_medium_days between 1 and 365),
   sla_low_days int not null default 14 check (sla_low_days between 1 and 365),

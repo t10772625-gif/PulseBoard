@@ -7,6 +7,7 @@ import { TODAY } from "../mock-data";
 import { getActiveLocale, tr } from "@/i18n";
 import { DEFAULT_PERMISSIONS, type PermissionKey, type PermissionMatrix, type Role } from "../permissions";
 import { toPlan } from "../plans";
+import { isSafeLogo } from "../branding";
 
 export type DbCtx = { sb: SupabaseClient; ws: string; uid: string };
 export type ColumnRow = [string, string, number];
@@ -29,6 +30,7 @@ const agoToTs = (n: number | undefined) => (n === undefined ? null : new Date(Da
 type TaskRow = {
   id: string;
   number: number | null;
+  created_by?: string | null;
   project_id: string;
   status: string;
   title: string;
@@ -61,11 +63,13 @@ export function rowToTask(ctx: DbCtx, r: TaskRow): Task {
   return {
     id: r.id,
     number: r.number ?? undefined,
+    createdBy: r.created_by ? fromDbUser(ctx, r.created_by) : undefined,
     title: r.title,
     projectId: r.project_id,
     status: r.status,
     priority: r.priority,
     assignee: fromDbUser(ctx, r.assignee_id),
+    unassigned: r.assignee_id ? undefined : true,
     dueOffset: due,
     barStart: -Math.min(created, 10),
     lengthDays: Math.max(1, due + Math.min(created, 10)),
@@ -199,11 +203,11 @@ export async function loadWorkspace(sb: SupabaseClient): Promise<Loaded | null> 
   const uid = auth.user?.id;
   if (!uid) return null;
 
-  let mineRes = await sb.from("workspace_members").select("workspace_id, workspaces(name, plan, created_by, task_prefix)").eq("user_id", uid).limit(1);
-  // Before 21_simplify-roles / 22_task-keys these columns don't exist
+  let mineRes = await sb.from("workspace_members").select("workspace_id, workspaces(name, plan, task_prefix)").eq("user_id", uid).limit(1);
+  // Before 22_task-keys the task_prefix column doesn't exist
   if (mineRes.error && MISSING.test(mineRes.error.message)) mineRes = (await sb.from("workspace_members").select("workspace_id, workspaces(name, plan)").eq("user_id", uid).limit(1)) as typeof mineRes;
   const mine = check(mineRes);
-  const first = mine?.[0] as unknown as { workspace_id: string; workspaces: { name: string; plan: string; created_by?: string | null; task_prefix?: string } } | undefined;
+  const first = mine?.[0] as unknown as { workspace_id: string; workspaces: { name: string; plan: string; task_prefix?: string } } | undefined;
   if (!first) throw new Error("No workspace found for this account.");
   const ctx: DbCtx = { sb, ws: first.workspace_id, uid };
 
@@ -290,14 +294,15 @@ export async function loadWorkspace(sb: SupabaseClient): Promise<Loaded | null> 
   const ruleRows = check(await sb.from("automation_rules").select("*").eq("workspace_id", ctx.ws).order("created_at")) as (AutomationRule & { param: string | null })[];
   const rules: AutomationRule[] = ruleRows.map((r) => ({ id: r.id, name: r.name, trigger: r.trigger, action: r.action, param: r.param ?? undefined, active: r.active, runs: r.runs }));
 
-  const linkRows = check(await sb.from("share_links").select("token, kind, target_id, created_at, revoked_at").eq("workspace_id", ctx.ws)) as {
+  const linkRows = check(await sb.from("share_links").select("token, kind, target_id, created_at, revoked_at, created_by").eq("workspace_id", ctx.ws)) as {
     token: string;
     kind: ShareLink["kind"];
     target_id: string;
     created_at: string;
     revoked_at: string | null;
+    created_by: string | null;
   }[];
-  const shareLinks: ShareLink[] = linkRows.map((l) => ({ token: l.token, kind: l.kind, targetId: l.target_id, createdAt: new Date(l.created_at).getTime(), revoked: !!l.revoked_at }));
+  const shareLinks: ShareLink[] = linkRows.map((l) => ({ token: l.token, kind: l.kind, targetId: l.target_id, createdAt: new Date(l.created_at).getTime(), revoked: !!l.revoked_at, createdBy: l.created_by ? fromDbUser(ctx, l.created_by) : undefined }));
 
   // Role permission overrides on top of the defaults
   const permRows = check(await sb.from("role_permissions").select("role, permission, allowed").eq("workspace_id", ctx.ws)) as { role: Role; permission: PermissionKey; allowed: boolean }[];
@@ -307,19 +312,20 @@ export async function loadWorkspace(sb: SupabaseClient): Promise<Loaded | null> 
   });
 
   // Attachments: private bucket, so each file gets a short-lived signed URL
-  const fileRows = check(await sb.from("attachments").select("id, task_id, storage_path, file_name, mime_type").eq("workspace_id", ctx.ws)) as {
+  const fileRows = check(await sb.from("attachments").select("id, task_id, storage_path, file_name, mime_type, uploaded_by").eq("workspace_id", ctx.ws)) as {
     id: string;
     task_id: string;
     storage_path: string;
     file_name: string;
     mime_type: string;
+    uploaded_by: string | null;
   }[];
   const attachments: Record<string, Attachment[]> = {};
   if (fileRows.length) {
     const { data: signed } = await sb.storage.from("task-files").createSignedUrls(fileRows.map((f) => f.storage_path), 60 * 60);
     fileRows.forEach((f, i) => {
       const url = signed?.[i]?.signedUrl;
-      if (url) (attachments[f.task_id] ||= []).push({ id: f.id, taskId: f.task_id, url, name: f.file_name, kind: f.mime_type.startsWith("video/") ? "video" : "image" });
+      if (url) (attachments[f.task_id] ||= []).push({ id: f.id, taskId: f.task_id, url, name: f.file_name, kind: f.mime_type.startsWith("video/") ? "video" : "image", uploadedBy: f.uploaded_by ? fromDbUser(ctx, f.uploaded_by) : undefined });
     });
   }
 
@@ -339,6 +345,7 @@ export async function loadWorkspace(sb: SupabaseClient): Promise<Loaded | null> 
   const settingsRow = soft(await sb.from("workspace_settings").select("*").eq("workspace_id", ctx.ws).maybeSingle(), null) as {
     brand_name: string | null;
     brand_color: string | null;
+    brand_logo?: string | null;
     sla_high_days: number;
     sla_medium_days: number;
     sla_low_days: number;
@@ -350,6 +357,7 @@ export async function loadWorkspace(sb: SupabaseClient): Promise<Loaded | null> 
     branding: {
       name: settingsRow?.brand_name || "PulseBoard",
       color: settingsRow?.brand_color || DEFAULT_BRAND_COLOR,
+      logo: isSafeLogo(settingsRow?.brand_logo) ? (settingsRow?.brand_logo as string) : "",
       domain: settingsRow?.custom_domain ?? "",
       domainStatus: settingsRow?.custom_domain ? "pending" : "none",
     },
@@ -391,14 +399,12 @@ export async function loadWorkspace(sb: SupabaseClient): Promise<Loaded | null> 
   return {
     ctx,
     workspaceName: first.workspaces.name,
-    // Before 21_simplify-roles there is no created_by: the database Owner is the one who
-    // may change the plan (test_set_plan in 19 checks Owner), so treat them as the creator
-    creatorId: first.workspaces.created_by
-      ? fromDbUser(ctx, first.workspaces.created_by)
-      : (() => {
-          const owner = memberRows.find((m) => (m.role as string) === "Owner");
-          return owner ? fromDbUser(ctx, owner.user_id) : null;
-        })(),
+    // The workspace's one Admin (= owner / buyer; controls billing). A database that
+    // hasn't run 21_simplify-roles still stores that person as "Owner".
+    creatorId: (() => {
+      const admin = memberRows.find((m) => (m.role as string) === "Admin" || (m.role as string) === "Owner");
+      return admin ? fromDbUser(ctx, admin.user_id) : null;
+    })(),
     taskPrefix: first.workspaces.task_prefix ?? "",
     customFields,
     savedFilters: filterRows,
@@ -443,9 +449,20 @@ export function repo(ctx: DbCtx) {
       run(sb.from("projects").insert({ id: p.id, workspace_id: ws, name: p.name, description: p.description, color: p.color, gradient: p.gradient })).then(() =>
         run(sb.from("board_columns").insert(cols.map(([key, label, limit], i) => ({ project_id: p.id, status_key: key, label, wip_limit: limit, position: i }))))
       ),
-    replaceColumns: async (projectId: string, cols: ColumnRow[]) => {
-      await run(sb.from("board_columns").delete().eq("project_id", projectId));
-      await run(sb.from("board_columns").insert(cols.map(([key, label, limit], i) => ({ project_id: projectId, status_key: key, label, wip_limit: limit, position: i }))));
+    // Saves only what changed, so each step needs only its own permission
+    // (column.create / column.edit / column.delete in 26_granular-permissions).
+    // Columns are matched by status key (unique per board).
+    syncColumns: async (projectId: string, prev: ColumnRow[], next: ColumnRow[]) => {
+      const before = new Map(prev.map(([key, label, limit], i) => [key, { label, limit, position: i }]));
+      const after = new Set(next.map(([key]) => key));
+      const removed = prev.map(([key]) => key).filter((key) => !after.has(key));
+      if (removed.length) await run(sb.from("board_columns").delete().eq("project_id", projectId).in("status_key", removed));
+      for (const [i, [key, label, limit]] of next.entries()) {
+        const old = before.get(key);
+        if (!old) await run(sb.from("board_columns").insert({ project_id: projectId, status_key: key, label, wip_limit: limit, position: i }));
+        else if (old.label !== label || old.limit !== limit || old.position !== i)
+          await run(sb.from("board_columns").update({ label, wip_limit: limit, position: i }).eq("project_id", projectId).eq("status_key", key));
+      }
     },
     insertTask: (t: Task) =>
       run(sb.from("tasks").insert({ id: t.id, workspace_id: ws, ...taskPatchToRow(ctx, t), created_at: agoToTs(t.createdDaysAgo) ?? new Date().toISOString() })),
@@ -548,7 +565,7 @@ export function repo(ctx: DbCtx) {
     deleteSavedFilter: (id: string) => run(sb.from("saved_filters").delete().eq("id", id)),
     insertTemplate: (t: TaskTemplate) => run(sb.from("task_templates").insert({ id: t.id, workspace_id: ws, name: t.name, tasks: t.tasks })),
     deleteTemplate: (id: string) => run(sb.from("task_templates").delete().eq("id", id)),
-    updateSettings: (patch: Partial<{ brand_name: string | null; brand_color: string; sla_high_days: number; sla_medium_days: number; sla_low_days: number; ai_enabled: boolean; custom_domain: string | null }>) =>
+    updateSettings: (patch: Partial<{ brand_name: string | null; brand_color: string; brand_logo: string | null; sla_high_days: number; sla_medium_days: number; sla_low_days: number; ai_enabled: boolean; custom_domain: string | null }>) =>
       run(sb.from("workspace_settings").update(patch).eq("workspace_id", ws)),
     setDigestMode: (digest_mode: boolean) => run(sb.from("user_preferences").upsert({ digest_mode }, { onConflict: "user_id" })),
     answerPulse: (score: number) => run(sb.rpc("answer_pulse", { ws, s: score })),

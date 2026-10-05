@@ -35,7 +35,7 @@ export default function NoBoardsPrompt() {
     }
     setClosedFor(ws);
   };
-  const canCreate = allowed("project.manage");
+  const canCreate = allowed("project.create");
 
   return (
     <Modal title={t("noBoards.title")} onClose={close}>

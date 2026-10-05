@@ -332,7 +332,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
     createShareLink,
     setFocusTaskId,
     history,
-    canEdit,
+    canTask,
     can,
     allowed,
   } = useStore();
@@ -348,6 +348,9 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
 
   if (!task) return null;
 
+  // Own-only rules: a Member may edit / move only tasks they created or are assigned to
+  const canEdit = canTask("edit", task);
+  const canMove = canTask("move", task);
   const locked = task.status === "done" || !canEdit;
   const blocker = task.blockedBy ? tasks.find((t) => t.id === task.blockedBy) : undefined;
   const blockedActive = blocker && blocker.status !== "done";
@@ -455,7 +458,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
               <Archive size={16} />
             </button>
           )}
-          {allowed("task.delete") && (
+          {canTask("delete", task) && (
             <button className="ic" aria-label={tt("drawer.deleteTask")} title={tt("drawer.deleteUndo")} onClick={() => deleteTask(taskId)}>
               <Trash2 size={16} />
             </button>
@@ -511,7 +514,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
       <div className="f2" style={{ marginBottom: 12 }}>
         <label>
           {tt("common.status")}
-          <Dropdown value={task.status} onChange={onStatusChange} disabled={!canEdit} options={getColumns(task.projectId).map(([s]) => ({ value: s, label: columnLabel(task.projectId, s) }))} />
+          <Dropdown value={task.status} onChange={onStatusChange} disabled={!canMove} options={getColumns(task.projectId).map(([s]) => ({ value: s, label: columnLabel(task.projectId, s) }))} />
         </label>
         <label>
           {tt("common.priority")}

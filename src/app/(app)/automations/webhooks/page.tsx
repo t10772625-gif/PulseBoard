@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
+import { Webhook } from "lucide-react";
+import { EmptyState } from "@/components/ui";
 import { listDeliveries, serverSetup, type Delivery } from "@/lib/integrations";
 import { AUTOMATION_GROUP, AUTOMATION_PAGES } from "@/lib/nav-groups";
 import Gate from "@/components/Gate";
@@ -49,7 +51,7 @@ export default function AutomationWebhooks() {
                   </div>
                 ))
               ) : (
-                <p className="mute">{tt("auto.noDeliveries")}</p>
+                <EmptyState compact icon={<Webhook size={26} />} title={tt("auto.noDeliveries")} />
               )
             ) : webhookLog.length ? (
               webhookLog.map((w) => (
@@ -61,7 +63,7 @@ export default function AutomationWebhooks() {
                 </div>
               ))
             ) : (
-              <p className="mute">{tt("auto.noDeliveries")}</p>
+              <EmptyState compact icon={<Webhook size={26} />} title={tt("auto.noDeliveries")} />
             )}
           </Gate>
         </div>

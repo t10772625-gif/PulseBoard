@@ -168,7 +168,7 @@ export function parseQuery(q: string, members: Record<MemberId, Member>, me: Mem
     preds.push(p);
   };
   if (!s) return { match: () => true, explain };
-  if (/\b(mine|my|me|mere|meri)\b|assignee\s*=\s*me/.test(s)) add(tr("ai.qAssigneeMe"), (t) => t.assignee === me);
+  if (/\b(mine|my|me|mere|meri)\b|assignee\s*=\s*me/.test(s)) add(tr("ai.qAssigneeMe"), (t) => t.assignee === me && !t.unassigned);
   for (const m of Object.values(members)) {
     const first = m.name.split(" ")[0].toLowerCase();
     if (m.id !== me && new RegExp(`\\b${first}\\b`).test(s)) add(tr("ai.qAssignee", { name: m.name }), (t) => t.assignee === m.id);
@@ -247,7 +247,7 @@ export function parseTaskText(text: string, members: Record<MemberId, Member>) {
 // ---------- Next best action (AI-19) ----------
 export function nextActions(tasks: Task[], me: MemberId = "me") {
   const out: { taskId: string; text: string; why: string }[] = [];
-  const mine = tasks.filter((t) => t.assignee === me && t.status !== "done");
+  const mine = tasks.filter((t) => t.assignee === me && !t.unassigned && t.status !== "done");
   mine
     .filter((t) => t.dueOffset < 0)
     .forEach((t) => out.push({ taskId: t.id, text: tr("ai.naFinish", { title: t.title }), why: tr("ai.whyOverdue", { n: -t.dueOffset }) }));
@@ -255,7 +255,7 @@ export function nextActions(tasks: Task[], me: MemberId = "me") {
     .filter((t) => t.dueOffset >= 0 && t.dueOffset <= 1)
     .forEach((t) => out.push({ taskId: t.id, text: tr("ai.naComplete", { title: t.title }), why: t.dueOffset === 0 ? tr("ai.whyToday") : tr("ai.whyTomorrow") }));
   tasks
-    .filter((t) => t.blockedBy && tasks.find((b) => b.id === t.blockedBy && b.assignee === me && b.status !== "done"))
+    .filter((t) => t.blockedBy && tasks.find((b) => b.id === t.blockedBy && b.assignee === me && !b.unassigned && b.status !== "done"))
     .forEach((t) => {
       const blocker = tasks.find((b) => b.id === t.blockedBy)!;
       out.push({ taskId: blocker.id, text: tr("ai.naUnblock", { title: t.title }), why: tr("ai.whyWaits", { title: blocker.title }) });

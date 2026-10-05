@@ -48,10 +48,11 @@ import {
 import { PLANS, hasFeature } from "./plans";
 import { DEFAULT_LOCALE, isSupportedLocale, loadLocale, tr } from "@/i18n";
 import { getSupabase, supabaseConfigured } from "./supabase/client";
+import { isSafeLogo } from "./branding";
 import { DEFAULT_BRAND_COLOR, initials, loadWorkspace, repo, rowToTask, type Invite, type Repo } from "./supabase/repo";
 import { nextTaskNumber, PREFIX_PATTERN, withDemoNumbers } from "./task-keys";
 import { aiDrafts, notifyServer, type AiDraft } from "./integrations";
-import { DEFAULT_PERMISSIONS, canEditRole, lockedForRole, type PermissionKey, type PermissionMatrix } from "./permissions";
+import { DEFAULT_PERMISSIONS, TASK_ACTION_KEYS, canEditRole, isOwnTask, lockedForRole, type PermissionKey, type PermissionMatrix, type TaskAction } from "./permissions";
 
 export type ColumnDef = [Status, string, number];
 
@@ -293,13 +294,15 @@ type Store = {
   canEdit: boolean;
   // RBAC: the signed-in user's real role, the admin-editable matrix, and a check
   myRole: Member["role"];
-  // The protected workspace creator: can't be demoted or removed, controls billing
+  // The workspace's one Admin (= owner / buyer): can't be demoted or removed, controls billing
   creatorId: MemberId | null;
   isCreator: boolean;
   permissions: PermissionMatrix;
   setPermission: (role: Member["role"], key: PermissionKey, value: boolean) => void;
   resetPermissions: (role: Member["role"]) => void;
   allowed: (key: PermissionKey) => boolean;
+  // Own-only task actions: may this role edit / move / delete this particular task?
+  canTask: (action: TaskAction, task: Pick<Task, "createdBy" | "assignee"> | undefined) => boolean;
   realMode: boolean;
   // Database id of the loaded workspace ("" in demo mode), for server routes
   workspaceId: string;
@@ -459,7 +462,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [webhookLog, setWebhookLog] = useState<WebhookDelivery[]>([]);
   const [clients, setClients] = useState<Client[]>(DEMO ? INITIAL_CLIENTS : []);
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
-  const [branding, setBrandingState] = useState<Branding>({ name: "PulseBoard", color: DEFAULT_BRAND_COLOR, domain: "", domainStatus: "none" });
+  const [branding, setBrandingState] = useState<Branding>({ name: "PulseBoard", color: DEFAULT_BRAND_COLOR, logo: "", domain: "", domainStatus: "none" });
   const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
   const [dndUntil, setDndUntil] = useState<number | null>(null);
   const [digestMode, setDigestMode] = useState(false);
@@ -486,7 +489,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
   // viewAsRole = the role the UI currently acts as. It starts as your real role;
   // an Admin can preview a lower role from Settings.
-  const [viewAsRole, setViewAsRole] = useState<Member["role"]>("Admin");
+  const [viewAsRole, setViewAsRole] = useState<Member["role"]>(DEMO ? "Admin" : "Viewer");
   const [permissions, setPermissions] = useState<PermissionMatrix>(DEFAULT_PERMISSIONS);
   const [taskSwitches, setTaskSwitches] = useState(0);
   const [standups, setStandups] = useState<Store["standups"]>(
@@ -510,10 +513,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const digestRef = useRef(digestMode);
   const membersRef = useRef(members);
   const planRef = useRef(plan);
+  const attachmentsRef = useRef(attachments);
+  const shareLinksRef = useRef(shareLinks);
   useEffect(() => {
     membersRef.current = members;
     planRef.current = plan;
-  }, [members, plan]);
+    attachmentsRef.current = attachments;
+    shareLinksRef.current = shareLinks;
+  }, [members, plan, attachments, shareLinks]);
   // First name of the signed-in user, for activity messages ("Sara moved this to Done")
   const meName = () => membersRef.current.me?.name.split(" ")[0] ?? tr("common.you");
   useEffect(() => {
@@ -556,13 +563,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const noInsertIds = useRef(new Set<string>()); // restored/unarchived rows already exist in the DB
   const notificationIds = useRef<(string | undefined)[]>([]);
 
-  const persist = useCallback((fn: (r: Repo) => Promise<unknown>) => {
+  // Saves a change in the background. If the database rejects it, `undo` puts the
+  // screen back to what is really stored, so a refused change never looks saved.
+  const persist = useCallback((fn: (r: Repo) => Promise<unknown>, undo?: () => void) => {
     const db = dbRef.current;
     if (!db) return;
     fn(db).catch((e: Error) => {
       // Raw database errors stay in the console, never in the UI (CLAUDE.md §6.1)
       console.error("[persist]", e);
-      setToastMessage(tr("store.saveFailed"));
+      undo?.();
+      const denied = /not allowed|row-level security|permission denied|42501/i.test(e?.message ?? "");
+      setToastMessage(denied ? tr("rbac.deniedUndone") : undo ? tr("store.saveFailedUndone") : tr("store.saveFailed"));
       setToastAction(null);
     });
   }, []);
@@ -635,7 +646,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setCustomFields([]);
     setSavedFilters([]);
     setTemplates(BUILT_IN_TEMPLATES);
-    setBrandingState({ name: "PulseBoard", color: DEFAULT_BRAND_COLOR, domain: "", domainStatus: "none" });
+    setBrandingState({ name: "PulseBoard", color: DEFAULT_BRAND_COLOR, logo: "", domain: "", domainStatus: "none" });
     setSlaState({ h: 3, m: 7, l: 14 });
     setAiEnabledState(false);
     setAiUses(0);
@@ -773,26 +784,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // Once a change is saved, the server tells connected channels / rule webhooks /
     // the assignee's browser (it re-checks the task itself, see /api/notify)
     const ws = workspaceIdRef.current;
+    // Undo for a refused save: put back the stored version (or drop a task that was
+    // never inserted). The previous-list ref is patched the same way so the undo
+    // itself isn't sent to the database again. A newer local edit is left alone.
+    const undoTask = (attempted: Task, stored: Task | null) => () => {
+      const swap = (list: Task[]) => (stored ? list.map((x) => (x === attempted ? stored : x)) : list.filter((x) => x !== attempted));
+      if (prevTasksRef.current) prevTasksRef.current = swap(prevTasksRef.current);
+      setTasks(swap);
+    };
     for (const t of tasks) {
       const old = before.get(t.id);
       if (!old) {
         if (noInsertIds.current.delete(t.id)) continue;
-        persist((r) =>
-          r.insertTask(t).then(() => {
-            notifyServer(ws, t.id, "task.created");
-            if (t.priority === "h") notifyServer(ws, t.id, "task.high");
-            if (t.assignee !== "me") notifyServer(ws, t.id, "task.assigned");
-          })
+        persist(
+          (r) =>
+            r.insertTask(t).then(() => {
+              notifyServer(ws, t.id, "task.created");
+              if (t.priority === "h") notifyServer(ws, t.id, "task.high");
+              if (t.assignee !== "me") notifyServer(ws, t.id, "task.assigned");
+            }),
+          undoTask(t, null)
         );
       } else if (old !== t) {
         const patch = changedFields(old, t);
         if (Object.keys(patch).length)
-          persist((r) =>
-            r.updateTasks([t.id], patch).then(() => {
-              if (patch.status === "done") notifyServer(ws, t.id, "task.done");
-              if (patch.priority === "h") notifyServer(ws, t.id, "task.high");
-              if (patch.assignee && patch.assignee !== "me") notifyServer(ws, t.id, "task.assigned");
-            })
+          persist(
+            (r) =>
+              r.updateTasks([t.id], patch).then(() => {
+                if (patch.status === "done") notifyServer(ws, t.id, "task.done");
+                if (patch.priority === "h") notifyServer(ws, t.id, "task.high");
+                if (patch.assignee && patch.assignee !== "me") notifyServer(ws, t.id, "task.assigned");
+              }),
+            undoTask(t, old)
           );
       }
     }
@@ -808,7 +831,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     if (!dbRef.current || !prev) return;
     for (const [projectId, cols] of Object.entries(customColumns)) {
-      if (prev[projectId] !== cols) persist((r) => r.replaceColumns(projectId, cols));
+      if (prev[projectId] !== cols) persist((r) => r.syncColumns(projectId, prev[projectId] ?? COLUMNS, cols));
     }
   }, [customColumns, persist]);
 
@@ -824,6 +847,58 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       action ? 5000 : 2200
     );
   }, []);
+
+  // ---------- RBAC guard ----------
+  // Every write checks the role permission here as well as hiding the button. The
+  // database enforces the same rules (RLS + triggers); this stops a refused change
+  // before the screen shows it. Uses the role the UI acts as (an Admin previewing
+  // a lower role is held to that role). Refs keep the callbacks stable.
+  const roleRef = useRef(viewAsRole);
+  const permsRef = useRef(permissions);
+  useEffect(() => {
+    roleRef.current = viewAsRole;
+    permsRef.current = permissions;
+  }, [viewAsRole, permissions]);
+  const guard = useCallback(
+    (key: PermissionKey) => {
+      const r = roleRef.current;
+      const ok = r === "Admin" || (!lockedForRole(r, key) && !!permsRef.current[r]?.[key]);
+      if (!ok) toast(tr("rbac.denied", { action: tr(`perm.${key}`) }));
+      return ok;
+    },
+    [toast]
+  );
+
+  // Own-only task actions: edit / move / delete need the base permission and, for
+  // someone else's task, the "anyone's" one (same rule as task_permitted() in the DB).
+  const taskOk = useCallback((action: TaskAction, task: Task | undefined) => {
+    if (!task) return false;
+    const r = roleRef.current;
+    const has = (k: PermissionKey) => r === "Admin" || (!lockedForRole(r, k) && !!permsRef.current[r]?.[k]);
+    const { base, all } = TASK_ACTION_KEYS[action];
+    return has(base) && (has(all) || isOwnTask(task));
+  }, []);
+  const guardTask = useCallback(
+    (action: TaskAction, task: Task | undefined) => {
+      if (taskOk(action, task)) return true;
+      toast(tr("rbac.deniedTask", { action: tr(`rbac.taskAction.${action}`) }));
+      return false;
+    },
+    [taskOk, toast]
+  );
+  // A patch can touch several permissions: assignee → assign, status → move, the rest → edit
+  const guardPatch = useCallback(
+    (task: Task | undefined, patch: Partial<Task>) => {
+      const keys = Object.keys(patch);
+      if (!keys.length) return true;
+      if (keys.includes("assignee") && !guard("task.assign")) return false;
+      const moveKeys = ["status", "startedDaysAgo", "completedDaysAgo"];
+      if (keys.some((k) => moveKeys.includes(k)) && !guardTask("move", task)) return false;
+      if (keys.some((k) => k !== "assignee" && !moveKeys.includes(k)) && !guardTask("edit", task)) return false;
+      return true;
+    },
+    [guard, guardTask]
+  );
 
   const changePlan = useCallback(
     async (p: Plan) => {
@@ -902,23 +977,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const addProject = useCallback(
     (name: string, description: string, color: string, gradient: string) => {
+    if (!guard("project.create")) return "";
       const id = nextId("p");
       const project = { id, name, description, color, gradient };
       setProjects((p) => ({ ...p, [id]: project }));
       persist((r) => r.insertProject(project, COLUMNS));
       return id;
     },
-    [persist]
+    [guard, persist]
   );
 
   const getColumns = useCallback((projectId: ProjectId) => customColumns[projectId] ?? COLUMNS, [customColumns]);
 
   const addColumn = useCallback((projectId: ProjectId, label: string, limit: number = 0) => {
+    if (!guard("column.create")) return;
     const id = nextId("col");
     setCustomColumns((c) => ({ ...c, [projectId]: [...(c[projectId] ?? COLUMNS), [id, label, limit] as ColumnDef] }));
-  }, []);
+  }, [guard]);
 
   const moveColumn = useCallback((projectId: ProjectId, status: Status, direction: -1 | 1) => {
+    if (!guard("column.edit")) return;
     setCustomColumns((c) => {
       const cols = [...(c[projectId] ?? COLUMNS)];
       const i = cols.findIndex((col) => col[0] === status);
@@ -927,21 +1005,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       [cols[i], cols[j]] = [cols[j], cols[i]];
       return { ...c, [projectId]: cols };
     });
-  }, []);
+  }, [guard]);
 
   const renameColumn = useCallback((projectId: ProjectId, status: Status, label: string) => {
+    if (!guard("column.edit")) return;
     setCustomColumns((c) => ({
       ...c,
       [projectId]: (c[projectId] ?? COLUMNS).map((col) => (col[0] === status ? ([col[0], label, col[2]] as ColumnDef) : col)),
     }));
-  }, []);
+  }, [guard]);
 
   const setColumnLimit = useCallback((projectId: ProjectId, status: Status, limit: number) => {
+    if (!guard("column.edit")) return;
     setCustomColumns((c) => ({
       ...c,
       [projectId]: (c[projectId] ?? COLUMNS).map((col) => (col[0] === status ? ([col[0], col[1], limit] as ColumnDef) : col)),
     }));
-  }, []);
+  }, [guard]);
 
   const columnLabel = useCallback(
     (projectId: ProjectId, status: Status) => {
@@ -958,14 +1038,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Industry templates (CORE-03). Existing tasks keep working: the first/last
   // template columns reuse the "todo"/"done" ids that health and locking rely on.
   const applyBoardTemplate = useCallback((projectId: ProjectId, cols: [string, number][]) => {
+    if (!guard("column.create") || !guard("column.edit") || !guard("column.delete")) return;
     const defs: ColumnDef[] = cols.map(([label, limit], i) => [i === 0 ? "todo" : i === cols.length - 1 ? "done" : i === 1 && cols.length > 2 ? "prog" : nextId("col"), label, limit]);
     setCustomColumns((c) => ({ ...c, [projectId]: defs }));
     const valid = new Set(defs.map((d) => d[0]));
     setTasks((ts) => ts.map((t) => (t.projectId === projectId && !valid.has(t.status) ? { ...t, status: "todo" } : t)));
-  }, []);
+  }, [guard]);
 
   const createTask = useCallback(
     (data: NewTaskInput) => {
+    if (!guard("task.create")) return "";
       const id = nextId("t");
       const task: Task = {
         status: "todo",
@@ -980,6 +1062,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         trackedSeconds: 0,
         createdDaysAgo: 0,
         ...data,
+        createdBy: "me",
         id,
       };
       // Demo mode numbers the task here; in real mode the database hands out the
@@ -993,7 +1076,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (task.priority === "h") runRules("priority_high", task);
       return id;
     },
-    [runRules]
+    [guard, runRules]
   );
 
   const addTask = useCallback(
@@ -1027,11 +1110,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const setTaskField = useCallback(
     <K extends "status" | "priority" | "assignee">(id: string, field: K, value: Task[K]) => {
+    if (field === "assignee" ? !guard("task.assign") : !guardTask(field === "status" ? "move" : "edit", tasksRef.current.find((t) => t.id === id))) return;
       const before = tasksRef.current.find((t) => t.id === id);
       setTasks((ts) =>
         ts.map((t) => {
           if (t.id !== id) return t;
           const next = { ...t, [field]: value };
+          if (field === "assignee") delete next.unassigned;
           if (field === "status" && value === "done") next.completedDaysAgo = 0;
           if (field === "status" && value === "prog" && t.startedDaysAgo === undefined) next.startedDaysAgo = 0;
           return next;
@@ -1062,28 +1147,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [logActivity, columnLabel, runRules, spawnRecurrence, notify, persist]
+    [guardTask, guard, logActivity, columnLabel, runRules, spawnRecurrence, notify, persist]
   );
 
   const updateTask = useCallback(
     (id: string, patch: Partial<Task>, note?: string) => {
-      setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+    if (!guardPatch(tasksRef.current.find((t) => t.id === id), patch)) return;
+      setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, ...patch, ...("assignee" in patch ? { unassigned: undefined } : {}) } : t)));
       if (note) logActivity(id, note);
     },
-    [logActivity]
+    [guardPatch, logActivity]
   );
 
   const updateTasks = useCallback(
     (ids: string[], patch: Partial<Task>, note?: string) => {
+    if (!ids.every((id) => guardPatch(tasksRef.current.find((t) => t.id === id), patch))) return;
       const set = new Set(ids);
-      setTasks((ts) => ts.map((t) => (set.has(t.id) ? { ...t, ...patch } : t)));
+      setTasks((ts) => ts.map((t) => (set.has(t.id) ? { ...t, ...patch, ...("assignee" in patch ? { unassigned: undefined } : {}) } : t)));
       if (note) ids.forEach((id) => logActivity(id, note));
     },
-    [logActivity]
+    [guardPatch, logActivity]
   );
 
   const toggleSubtask = useCallback(
     (taskId: string, index: number) => {
+    if (!guardTask("edit", tasksRef.current.find((t) => t.id === taskId))) return;
       let label = "";
       let nowDone = false;
       setTasks((ts) =>
@@ -1100,36 +1188,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
       logActivity(taskId, tr("store.actSubtask", { name: meName(), label, state: nowDone ? tr("store.stateDone") : tr("store.stateNotDone") }));
     },
-    [logActivity]
+    [guardTask, logActivity]
   );
 
   const addSubtask = useCallback(
     (taskId: string, title: string) => {
+    if (!guardTask("edit", tasksRef.current.find((t) => t.id === taskId))) return;
       setTasks((ts) => ts.map((t) => (t.id === taskId ? { ...t, subtasks: [...t.subtasks, [title, 0] as [string, 0 | 1]] } : t)));
       logActivity(taskId, tr("store.actAddSubtask", { name: meName(), title }));
     },
-    [logActivity]
+    [guardTask, logActivity]
   );
 
   const toggleChecklist = useCallback((taskId: string, index: number) => {
+    if (!guardTask("edit", tasksRef.current.find((t) => t.id === taskId))) return;
     setTasks((ts) =>
       ts.map((t) =>
         t.id === taskId ? { ...t, checklist: (t.checklist ?? []).map((s, i) => (i === index ? ([s[0], s[1] ? 0 : 1] as [string, 0 | 1]) : s)) } : t
       )
     );
-  }, []);
+  }, [guardTask]);
 
   const addChecklistItem = useCallback(
     (taskId: string, title: string) => {
+    if (!guardTask("edit", tasksRef.current.find((t) => t.id === taskId))) return;
       setTasks((ts) => ts.map((t) => (t.id === taskId ? { ...t, checklist: [...(t.checklist ?? []), [title, 0] as [string, 0 | 1]] } : t)));
       logActivity(taskId, tr("store.actAddChecklist", { name: meName(), title }));
     },
-    [logActivity]
+    [guardTask, logActivity]
   );
 
   // Soft delete (CORE-04, CORE-21, CORE-22): tasks move to trash with their
   // comments/activity/files so Undo restores everything.
   const restoreTasks = useCallback((ids: string[]) => {
+    if (!trashRef.current.filter((x) => ids.includes(x.task.id)).every((x) => guardTask("delete", x.task))) return;
     const back = trashRef.current.filter((x) => ids.includes(x.task.id));
     if (!back.length) return;
     const live = new Set(tasksRef.current.map((t) => t.id));
@@ -1142,10 +1234,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // The row still exists (soft deleted), so clear deleted_at instead of inserting
     fresh.forEach((x) => noInsertIds.current.add(x.task.id));
     persist((r) => r.restore(back.map((x) => x.task.id)));
-  }, [persist]);
+  }, [guardTask, persist]);
 
   const deleteTasks = useCallback(
     (ids: string[]) => {
+    if (!tasksRef.current.filter((t) => ids.includes(t.id)).every((t) => guardTask("delete", t))) return;
       if (!ids.length) return;
       const set = new Set(ids);
       const removed = tasksRef.current.filter((t) => set.has(t.id));
@@ -1173,20 +1266,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       persist((r) => r.softDelete(removed.map((t) => t.id)));
       toast(tr("store.deleted", { n: removed.length }), { label: tr("store.undo"), run: () => restoreTasks(ids) });
     },
-    [comments, activity, attachments, toast, restoreTasks, persist]
+    [guardTask, comments, activity, attachments, toast, restoreTasks, persist]
   );
 
   const deleteTask = useCallback((taskId: string) => deleteTasks([taskId]), [deleteTasks]);
 
   const purgeTrash = useCallback(() => {
+    if (!trashRef.current.every((x) => guardTask("delete", x.task))) return;
     trashRef.current.forEach((x) => x.attachments.forEach((f) => URL.revokeObjectURL(f.url)));
     const ids = trashRef.current.map((x) => x.task.id);
     setTrash([]);
     persist((r) => r.hardDelete(ids));
-  }, [persist]);
+  }, [guardTask, persist]);
 
   const archiveTasks = useCallback(
     (ids: string[]) => {
+    if (!guard("task.archive")) return;
       const set = new Set(ids);
       const moving = tasksRef.current.filter((t) => set.has(t.id));
       setArchived((a) => [...moving, ...a]);
@@ -1196,11 +1291,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       persist((r) => r.setArchived(moving.map((t) => t.id), true));
       toast(tr("store.archived", { n: moving.length }), { label: tr("store.undo"), run: () => unarchiveRef.current(ids) });
     },
-    [toast, persist]
+    [guard, toast, persist]
   );
 
   const unarchiveTasks = useCallback(
     (ids: string[]) => {
+    if (!guard("task.archive")) return;
       const live = new Set(tasksRef.current.map((t) => t.id));
       const back = archivedRef.current.filter((t) => ids.includes(t.id) && !live.has(t.id));
       back.forEach((t) => noInsertIds.current.add(t.id));
@@ -1208,7 +1304,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setArchived((a) => a.filter((t) => !ids.includes(t.id)));
       persist((r) => r.setArchived(back.map((t) => t.id), false));
     },
-    [persist]
+    [guard, persist]
   );
   const unarchiveRef = useRef(unarchiveTasks);
 
@@ -1229,10 +1325,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const setMemberRole = useCallback(
     (id: MemberId, role: Member["role"]) => {
+    if (!guard("member.edit")) return;
       setMembers((m) => ({ ...m, [id]: { ...m[id], role } }));
       persist((r) => r.setMemberRole(id, role));
     },
-    [persist]
+    [guard, persist]
   );
   const setCapacity = useCallback(
     (id: MemberId, value: number) => {
@@ -1245,6 +1342,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const addComment = useCallback(
     (taskId: string, text: string, parentId: string | null = null) => {
+    if (!guard("comment.create")) return;
       const id = nextId("c");
       const comment: Comment = { id, taskId, parentId, author: "me" as MemberId, text, at: tr("time.justNow"), likedBy: [] };
       setComments((c) => ({ ...c, [taskId]: [...(c[taskId] || []), comment] }));
@@ -1259,7 +1357,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [logActivity, persist]
+    [guard, logActivity, persist]
   );
 
   const toggleCommentLike = useCallback(
@@ -1277,6 +1375,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // uploaded to the private bucket, where the plan's storage quota is enforced.
   const addAttachments = useCallback(
     (taskId: string, files: FileList | File[]) => {
+    if (!guard("file.upload")) return;
       const list = Array.from(files).filter((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
       if (list.length === 0) return;
       const items: Attachment[] = list.map((f) => ({
@@ -1285,16 +1384,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         url: URL.createObjectURL(f),
         kind: f.type.startsWith("video/") ? "video" : "image",
         name: f.name,
+        uploadedBy: "me",
       }));
       setAttachments((a) => ({ ...a, [taskId]: [...(a[taskId] || []), ...items] }));
       logActivity(taskId, tr("store.actAttached", { name: meName(), n: items.length }));
       list.forEach((file, i) => persist((r) => r.uploadAttachment(items[i].id, taskId, file)));
     },
-    [logActivity, persist]
+    [guard, logActivity, persist]
   );
 
   const removeAttachment = useCallback(
     (taskId: string, attachmentId: string) => {
+    const file = (attachmentsRef.current[taskId] || []).find((f) => f.id === attachmentId);
+    if (!guard(file?.uploadedBy === "me" ? "file.delete" : "file.delete_all")) return;
       setAttachments((a) => {
         const current = a[taskId] || [];
         const target = current.find((f) => f.id === attachmentId);
@@ -1303,7 +1405,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       persist((r) => r.deleteAttachment(attachmentId));
     },
-    [persist]
+    [guard, persist]
   );
 
   const toggleBoardFilter = useCallback((f: "mine" | "high" | "blk") => {
@@ -1350,6 +1452,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const deleteColumn = useCallback(
     (projectId: ProjectId, status: Status) => {
+    if (!guard("column.delete")) return;
       const cols = customColumns[projectId] ?? COLUMNS;
       if (cols.length <= 1) {
         toast(tr("store.oneColumn"));
@@ -1362,7 +1465,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       setCustomColumns((c) => ({ ...c, [projectId]: cols.filter((col) => col[0] !== status) }));
     },
-    [customColumns, tasks, toast]
+    [guard, customColumns, tasks, toast]
   );
 
   const toggleTimer = useCallback(() => {
@@ -1445,11 +1548,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ---------- RBAC ----------
   // The plan decides which features exist; the role matrix decides who may use them.
-  const myRole: Member["role"] = members.me?.role ?? "Admin";
-  const isCreator = creatorId === "me";
+  const myRole: Member["role"] = members.me?.role ?? (DEMO ? "Admin" : "Viewer");
+  // Admin = owner = buyer (user design 2026-10-05): billing and Admin-only actions
+  const isCreator = myRole === "Admin";
   const allowed = useCallback(
     (key: PermissionKey) => viewAsRole === "Admin" || (!lockedForRole(viewAsRole, key) && !!permissions[viewAsRole]?.[key]),
     [viewAsRole, permissions]
+  );
+  // May the current role edit / move / delete this task? (own-only unless "anyone's")
+  const canTask = useCallback(
+    (action: TaskAction, task: Pick<Task, "createdBy" | "assignee"> | undefined) => {
+      if (!task) return false;
+      const { base, all } = TASK_ACTION_KEYS[action];
+      return allowed(base) && (allowed(all) || isOwnTask(task));
+    },
+    [allowed]
   );
 
   const setPermission = useCallback(
@@ -1530,19 +1643,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const addCustomField = useCallback(
     (def: Omit<CustomFieldDef, "id">) => {
+    if (!guard("field.create")) return;
       const full = { ...def, id: nextId("cf") };
       const position = customFieldsRef.current.length;
       setCustomFields((f) => [...f, full]);
       persist((r) => r.insertCustomField(full, position));
     },
-    [persist]
+    [guard, persist]
   );
   const removeCustomField = useCallback(
     (id: string) => {
+    if (!guard("field.delete")) return;
       setCustomFields((f) => f.filter((x) => x.id !== id));
       persist((r) => r.deleteCustomField(id));
     },
-    [persist]
+    [guard, persist]
   );
   const saveFilter = useCallback(
     (name: string, query: string) => {
@@ -1562,6 +1677,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const saveTemplate = useCallback(
     (name: string, projectId: ProjectId) => {
+    if (!guard("template.create")) return;
       const ts = tasksRef.current.filter((t) => t.projectId === projectId).slice(0, 100);
       const tpl: TaskTemplate = {
         id: nextId("tpl"),
@@ -1571,19 +1687,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setTemplates((tp) => [...tp, tpl]);
       persist((r) => r.insertTemplate(tpl));
     },
-    [persist]
+    [guard, persist]
   );
   const removeTemplate = useCallback(
     (id: string) => {
+    if (!guard("template.delete")) return;
       if (BUILT_IN_TEMPLATES.some((t) => t.id === id)) return;
       setTemplates((tp) => tp.filter((t) => t.id !== id));
       persist((r) => r.deleteTemplate(id));
     },
-    [persist]
+    [guard, persist]
   );
 
   const applyTemplate = useCallback(
     (templateId: string, projectId: ProjectId) => {
+    if (!guard("task.create")) return 0;
       const tpl = templates.find((t) => t.id === templateId);
       if (!tpl) return 0;
       tpl.tasks.forEach((t, i) =>
@@ -1599,32 +1717,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
       return tpl.tasks.length;
     },
-    [templates, createTask]
+    [guard, templates, createTask]
   );
 
   const addRule = useCallback(
     (rule: Omit<AutomationRule, "id" | "runs">) => {
+    if (!guard("automation.create")) return;
       const full = { ...rule, id: nextId("r"), runs: 0 };
       setRules((r) => [...r, full]);
       persist((db) => db.insertRule(full));
     },
-    [persist]
+    [guard, persist]
   );
   const toggleRule = useCallback(
     (id: string) => {
+    if (!guard("automation.edit")) return;
       const cur = rulesRef.current.find((x) => x.id === id);
       if (!cur) return;
       setRules((r) => r.map((x) => (x.id === id ? { ...x, active: !x.active } : x)));
       persist((db) => db.updateRule(id, { active: !cur.active }));
     },
-    [persist]
+    [guard, persist]
   );
   const removeRule = useCallback(
     (id: string) => {
+    if (!guard("automation.delete")) return;
       setRules((r) => r.filter((x) => x.id !== id));
       persist((db) => db.deleteRule(id));
     },
-    [persist]
+    [guard, persist]
   );
   const runOverdueRules = useCallback(() => {
     const overdue = tasksRef.current.filter((t) => t.status !== "done" && t.dueOffset < 0);
@@ -1635,42 +1756,50 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const addClient = useCallback(
     (c: Omit<Client, "id">) => {
+    if (!guard("client.create")) return;
       const full = { ...c, id: nextId("cl") };
       setClients((cs) => [...cs, full]);
       persist((db) => db.insertClient(full));
     },
-    [persist]
+    [guard, persist]
   );
   const updateClient = useCallback(
     (id: string, patch: Partial<Client>) => {
+    if (!guard("client.edit")) return;
       setClients((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
       persist((db) => db.updateClient(id, patch));
     },
-    [persist]
+    [guard, persist]
   );
 
   const createShareLink = useCallback(
     (kind: ShareLink["kind"], targetId: string) => {
+    if (!guard("share.create")) return "";
       const token = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
-      setShareLinks((l) => [{ token, kind, targetId, createdAt: Date.now(), revoked: false }, ...l]);
+      setShareLinks((l) => [{ token, kind, targetId, createdAt: Date.now(), revoked: false, createdBy: "me" }, ...l]);
       persist((db) => db.insertShareLink(token, kind, targetId));
       return token;
     },
-    [persist]
+    [guard, persist]
   );
   const revokeShareLink = useCallback(
     (token: string) => {
+    const link = shareLinksRef.current.find((x) => x.token === token);
+    if (link && link.createdBy !== "me" && !guard("share.revoke_all")) return;
       setShareLinks((l) => l.map((x) => (x.token === token ? { ...x, revoked: true } : x)));
       persist((db) => db.revokeShareLink(token));
     },
-    [persist]
+    [guard, persist]
   );
   // Branding name / colour / custom domain are saved per workspace (Admin). The
   // domain status is never saved from here: it comes from the server DNS check.
   const setBranding = useCallback(
     (b: Partial<Branding>) => {
+      // A logo that fails the type/size check is dropped, never stored or shown
+      if (b.logo !== undefined && b.logo && !isSafeLogo(b.logo)) b = { ...b, logo: "" };
       setBrandingState((cur) => ({ ...cur, ...b }));
       const patch: Parameters<Repo["updateSettings"]>[0] = {};
+      if (b.logo !== undefined) patch.brand_logo = b.logo || null;
       if (b.name !== undefined) patch.brand_name = b.name.trim() ? b.name.trim().slice(0, 60) : null;
       if (b.color !== undefined && /^#[0-9a-fA-F]{6}$/.test(b.color)) patch.brand_color = b.color;
       if (b.domain !== undefined) patch.custom_domain = b.domain || null;
@@ -1832,6 +1961,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Returns an error message for the form, or null on success. DB errors are mapped, never shown raw.
   const addInvite = useCallback(
     async (email: string, role: Member["role"]) => {
+      if (!guard("member.invite")) return tr("rbac.denied", { action: tr("perm.member.invite") });
       const db = dbRef.current;
       if (!db) return tr("store.inviteDemo");
       try {
@@ -1846,7 +1976,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       await refreshInvites();
       return null;
     },
-    [refreshInvites]
+    [guard, refreshInvites]
   );
   const updateMyName = useCallback(async (name: string) => {
     const db = dbRef.current;
@@ -1863,10 +1993,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
   const revokeInvite = useCallback(
     async (id: string) => {
+    if (!guard("member.invite")) return;
       setInvitesState((l) => l.filter((i) => i.id !== id));
       persist((db) => db.revokeInvite(id));
     },
-    [persist]
+    [guard, persist]
   );
 
   const toggleTheme = useCallback(() => {
@@ -2011,6 +2142,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         viewAsRole,
         setViewAsRole,
         canEdit: allowed("task.edit"),
+        canTask,
         myRole,
         creatorId,
         isCreator,

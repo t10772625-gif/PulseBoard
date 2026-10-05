@@ -32,6 +32,12 @@ export type Task = {
   id: string;
   // Task number inside the workspace (PB-123 → 123); handed out by the database in real mode
   number?: number;
+  // Who created it (tasks.created_by, set by the database; read-only here). With
+  // assignee it decides "own task" for own-only edit / move / delete.
+  createdBy?: MemberId;
+  // true when the database has no assignee (the app still shows it under the signed-in
+  // user). An unassigned task is nobody's "own" task and not in anyone's "mine" lists.
+  unassigned?: boolean;
   title: string;
   projectId: ProjectId;
   status: Status;
@@ -102,11 +108,11 @@ export type Client = {
   reportDay: "Fri" | "Mon" | "none";
 };
 
-export type ShareLink = { token: string; kind: "task" | "board"; targetId: string; createdAt: number; revoked: boolean };
+export type ShareLink = { token: string; kind: "task" | "board"; targetId: string; createdAt: number; revoked: boolean; createdBy?: MemberId };
 
 // domainStatus: "pending" = saved, DNS record not found yet; "verified" = the TXT record was found
 // by the server's live DNS check (it does not mean the app is served on that domain yet)
-export type Branding = { name: string; color: string; domain: string; domainStatus: "none" | "pending" | "verified" };
+export type Branding = { name: string; color: string; logo: string; domain: string; domainStatus: "none" | "pending" | "verified" };
 
 // SLA target in days per priority (Analytics -> Delivery)
 export type SlaTargets = Record<Priority, number>;
@@ -157,6 +163,8 @@ export type Attachment = {
   url: string;
   kind: "image" | "video";
   name: string;
+  // Who uploaded it ("me" = you): your own files need file.delete, others' file.delete_all
+  uploadedBy?: MemberId;
 };
 
 export type TrackingSession = {

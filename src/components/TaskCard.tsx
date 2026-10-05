@@ -8,7 +8,7 @@ import { taskKey } from "@/lib/task-keys";
 import { useT } from "@/i18n/I18nProvider";
 
 export default function TaskCard({ task }: { task: Task }) {
-  const { tasks, taskPrefix, openDrawer, deleteTask, selectedIds, toggleSelect, canEdit, allowed } = useStore();
+  const { tasks, taskPrefix, openDrawer, deleteTask, selectedIds, toggleSelect, canEdit, canTask } = useStore();
   const key = taskKey(task, taskPrefix);
   const { t: tt } = useT();
   const blocked = isBlocked(task, tasks);
@@ -29,7 +29,7 @@ export default function TaskCard({ task }: { task: Task }) {
   return (
     <div
       className={`task ${task.priority} ${selected ? "sel" : ""} ${selectedIds.length ? "selecting" : ""}`}
-      draggable={canEdit}
+      draggable={canTask("move", task)}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onClick={(e) => (e.shiftKey || selectedIds.length ? toggleSelect(task.id) : openDrawer(task.id))}
@@ -51,7 +51,7 @@ export default function TaskCard({ task }: { task: Task }) {
             <span key={l}>{l}</span>
           ))}
         </div>
-        {allowed("task.delete") && (
+        {canTask("delete", task) && (
           <button
             className="task-delete"
             aria-label={tt("card.delete", { title: task.title })}

@@ -1,9 +1,11 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { Info, MessagesSquare, Plus, Send, Trash2 } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { addChatWebhook, listChatWebhooks, removeChatWebhook, setChatWebhookActive, testChatWebhook, type ChatWebhook } from "@/lib/integrations";
-import { Switch } from "./ui";
+import { EmptyState, Switch } from "./ui";
 import Dropdown from "./Dropdown";
+import { SecHead } from "./FeaturePage";
 import { useT } from "@/i18n/I18nProvider";
 import type { MessageKey } from "@/i18n";
 
@@ -19,7 +21,9 @@ const EVENTS: { key: string; label: MessageKey }[] = [
 export default function ChatWebhooks() {
   const { workspaceId, allowed, toast } = useStore();
   const { t } = useT();
-  const canManage = allowed("automation.manage");
+  const canConnect = allowed("integration.connect");
+  const canManage = allowed("integration.edit");
+  const canDisconnect = allowed("integration.disconnect");
   const [hooks, setHooks] = useState<ChatWebhook[]>([]);
   const [kind, setKind] = useState<"slack" | "discord">("slack");
   const [url, setUrl] = useState("");
@@ -43,63 +47,74 @@ export default function ChatWebhooks() {
   }
 
   return (
-    <div className="card">
-      <h2>{t("int.channelsTitle")}</h2>
-      <p className="mute" style={{ fontSize: 12, marginBottom: 10 }}>
+    <section className="card ux-sec" aria-labelledby="cw-h">
+      <SecHead id="cw-h" icon={MessagesSquare} title={t("int.channelsTitle")}>
+        {hooks.length > 0 && <span className="int-st connected">{t("int.channels", { n: hooks.length })}</span>}
+      </SecHead>
+      <p className="mute" style={{ margin: 0, fontSize: 13 }}>
         {t("int.channelsHint")}
       </p>
-      {hooks.map((h) => (
-        <div key={h.id} className="sugg">
-          <span style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
-            <Switch
-              label={t("int.hookActive")}
-              checked={h.active}
-              disabled={!canManage}
-              onChange={async (v) => {
-                if (await setChatWebhookActive(h.id, v)) void reload();
-                else toast(t("store.saveFailed"));
-              }}
-            />
-            <span>
-              <b>{h.kind === "slack" ? "Slack" : "Discord"}</b> <span className="code" dir="ltr">{h.url_hint}</span>
-              <br />
-              <span className="mute" style={{ fontSize: 12 }}>
-                {h.events.map((e) => t(EVENTS.find((x) => x.key === e)?.label ?? "int.ev.created")).join(" · ")}
-              </span>
-            </span>
-          </span>
-          <span style={{ display: "flex", gap: 6 }}>
-            <button
-              className="ghost sm"
-              disabled={!canManage}
-              onClick={async () => {
-                const res = await testChatWebhook(workspaceId, h.id);
-                toast(res.ok && res.data?.ok ? t("int.testSent") : t("int.testFailed"));
-              }}
-            >
-              {t("int.test")}
-            </button>
-            <button
-              className="ghost sm danger"
-              disabled={!canManage}
-              onClick={async () => {
-                if (!window.confirm(t("int.hookRemoveConfirm"))) return;
-                if (await removeChatWebhook(h.id)) void reload();
-                else toast(t("store.saveFailed"));
-              }}
-            >
-              {t("common.remove")}
-            </button>
-          </span>
+      {hooks.length ? (
+        <div className="ux-rows">
+          {hooks.map((h) => (
+            <div key={h.id} className="st-row" style={{ flexWrap: "wrap" }}>
+              <Switch
+                label={t("int.hookActive")}
+                checked={h.active}
+                disabled={!canManage}
+                onChange={async (v) => {
+                  if (await setChatWebhookActive(h.id, v)) void reload();
+                  else toast(t("store.saveFailed"));
+                }}
+              />
+              <div className="st-row-main">
+                <b>{h.kind === "slack" ? "Slack" : "Discord"}</b>{" "}
+                <span className="code" dir="ltr">
+                  {h.url_hint}
+                </span>
+                <p className="mute">{h.events.map((e) => t(EVENTS.find((x) => x.key === e)?.label ?? "int.ev.created")).join(" · ")}</p>
+              </div>
+              <div className="ux-actions">
+                <button
+                  className="ghost sm"
+                  disabled={!canManage}
+                  onClick={async () => {
+                    const res = await testChatWebhook(workspaceId, h.id);
+                    toast(res.ok && res.data?.ok ? t("int.testSent") : t("int.testFailed"));
+                  }}
+                >
+                  <Send size={14} aria-hidden /> {t("int.test")}
+                </button>
+                <button
+                  className="ghost sm danger"
+                  disabled={!canDisconnect}
+                  onClick={async () => {
+                    if (!window.confirm(t("int.hookRemoveConfirm"))) return;
+                    if (await removeChatWebhook(h.id)) void reload();
+                    else toast(t("store.saveFailed"));
+                  }}
+                >
+                  <Trash2 size={14} aria-hidden /> {t("common.remove")}
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
-      ))}
-      {!hooks.length && <p className="mute">{t("int.noChannels")}</p>}
+      ) : (
+        <EmptyState compact icon={<MessagesSquare size={26} />} title={t("int.noChannels")} />
+      )}
 
-      {canManage && (
-        <div style={{ marginTop: 14, display: "grid", gap: 8 }}>
-          <div className="f2">
-            <Dropdown value={kind} onChange={setKind} options={[{ value: "slack", label: "Slack" }, { value: "discord", label: "Discord" }]} />
-            <input dir="ltr" placeholder={kind === "slack" ? "https://hooks.slack.com/services/…" : "https://discord.com/api/webhooks/…"} value={url} onChange={(e) => setUrl(e.target.value)} autoComplete="off" />
+      {canConnect && (
+        <div className="ux-result">
+          <div className="ux-form-2">
+            <label>
+              {t("cw.app")}
+              <Dropdown value={kind} onChange={setKind} options={[{ value: "slack", label: "Slack" }, { value: "discord", label: "Discord" }]} />
+            </label>
+            <label>
+              {t("cw.url")}
+              <input dir="ltr" placeholder={kind === "slack" ? "https://hooks.slack.com/services/…" : "https://discord.com/api/webhooks/…"} value={url} onChange={(e) => setUrl(e.target.value)} autoComplete="off" />
+            </label>
           </div>
           <div className="pill-row">
             {EVENTS.map((e) => (
@@ -109,14 +124,16 @@ export default function ChatWebhooks() {
               </label>
             ))}
           </div>
-          <button className="btn sm" style={{ justifySelf: "start" }} disabled={busy || !url.trim() || !events.length} onClick={add}>
-            {busy ? t("auth.wait") : t("int.connectChannel")}
-          </button>
-          <p className="mute" style={{ fontSize: 12 }}>
-            {kind === "slack" ? t("int.slackHow") : t("int.discordHow")}
+          <div className="ux-actions">
+            <button className="btn" disabled={busy || !url.trim() || !events.length} onClick={add}>
+              <Plus size={16} aria-hidden /> {busy ? t("auth.wait") : t("int.connectChannel")}
+            </button>
+          </div>
+          <p className="mute" style={{ margin: 0, fontSize: 12, display: "flex", gap: 6 }}>
+            <Info size={14} aria-hidden style={{ flexShrink: 0, marginTop: 1 }} /> {kind === "slack" ? t("int.slackHow") : t("int.discordHow")}
           </p>
         </div>
       )}
-    </div>
+    </section>
   );
 }

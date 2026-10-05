@@ -13,10 +13,11 @@ import NewProjectModal from "@/components/NewProjectModal";
 import AddColumnModal from "@/components/AddColumnModal";
 import InviteModal from "@/components/InviteModal";
 import NoBoardsPrompt from "@/components/NoBoardsPrompt";
+import BrandEffect from "@/components/BrandEffect";
 import WorkspaceLoader from "@/components/WorkspaceLoader";
 import { useStore } from "@/lib/store";
 import { getSupabase } from "@/lib/supabase/client";
-import { pagePermissionFor } from "@/lib/permissions";
+import { pagePermissionsFor } from "@/lib/permissions";
 import { pendingMfaFactor } from "@/components/AuthForm";
 import { useT } from "@/i18n/I18nProvider";
 
@@ -26,8 +27,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { t } = useT();
   // Page-level RBAC: a role without the page permission sees this instead of the page
-  const pagePerm = pagePermissionFor(pathname);
-  const blocked = pagePerm !== null && !allowed(pagePerm);
+  // A sub-page needs its section and its own switch; the message names the missing one
+  const pagePerm = pagePermissionsFor(pathname).find((k) => !allowed(k)) ?? null;
+  const blocked = pagePerm !== null;
 
   useEffect(() => {
     if (loggedIn) return;
@@ -140,6 +142,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <AddColumnModal />
       <InviteModal />
       <NoBoardsPrompt />
+      <BrandEffect />
       <Toast />
     </>
   );

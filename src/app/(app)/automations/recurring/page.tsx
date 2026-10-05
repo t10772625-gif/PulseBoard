@@ -1,5 +1,7 @@
 "use client";
 import { useStore } from "@/lib/store";
+import { Repeat } from "lucide-react";
+import { EmptyState } from "@/components/ui";
 import { AUTOMATION_GROUP, AUTOMATION_PAGES } from "@/lib/nav-groups";
 import Gate from "@/components/Gate";
 import SubPageHeader from "@/components/SubPageHeader";
@@ -25,7 +27,7 @@ export default function AutomationRecurring() {
                 </button>
               ))
             ) : (
-              <p className="mute">{tt("auto.noRecurring")}</p>
+              <EmptyState compact icon={<Repeat size={26} />} title={tt("auto.noRecurring")} />
             )}
           </Gate>
         </div>

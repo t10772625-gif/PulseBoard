@@ -1,8 +1,10 @@
 "use client";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { Info, Mail, ShieldCheck } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { disconnectGoogle, googleConnection, serverSetup, type GoogleConnection } from "@/lib/integrations";
+import { SecHead } from "./FeaturePage";
 import { useT } from "@/i18n/I18nProvider";
 import type { MessageKey } from "@/i18n";
 
@@ -27,46 +29,53 @@ function Inner() {
   const result = params.get("google");
 
   return (
-    <div className="card">
-      <h2>{t("int.gTitle")}</h2>
-      <p className="mute" style={{ fontSize: 13, marginBottom: 8 }}>
+    <section className="card ux-sec" aria-labelledby="gc-h">
+      <SecHead id="gc-h" icon={Mail} title={t("int.gTitle")}>
+        {conn ? <span className="int-st connected">{t("int.st.connected")}</span> : configured === false ? <span className="int-st setup">{t("int.st.setup")}</span> : <span className="int-st available">{t("int.st.available")}</span>}
+      </SecHead>
+      <p className="mute" style={{ margin: 0, fontSize: 13 }}>
         {t("int.gHint")}
       </p>
       {result && RESULT[result] && <p className={result === "connected" ? "approval approved" : "warn"}>{t(RESULT[result])}</p>}
       {conn ? (
-        <div className="sugg">
-          <span>
-            <b dir="ltr">{conn.account_email}</b>
-            <br />
-            <span className="mute" style={{ fontSize: 12 }}>
-              {[conn.scopes.includes("gmail.send") && t("int.gSend"), conn.scopes.includes("calendar.freebusy") && t("int.gBusy")].filter(Boolean).join(" · ")}
-            </span>
+        <div className="ux-result">
+          <b dir="ltr" style={{ textAlign: "start" }}>
+            {conn.account_email}
+          </b>
+          <span className="mute" style={{ fontSize: 12 }}>
+            {[conn.scopes.includes("gmail.send") && t("int.gSend"), conn.scopes.includes("calendar.freebusy") && t("int.gBusy")].filter(Boolean).join(" · ")}
           </span>
-          <button
-            className="ghost sm danger"
-            onClick={async () => {
-              if (!window.confirm(t("int.gDisconnectConfirm"))) return;
-              const res = await disconnectGoogle();
-              if (!res.ok) return toast(t("store.saveFailed"));
-              void reload();
-              toast(t("int.gDisconnected"));
-            }}
-          >
-            {t("int.gDisconnect")}
-          </button>
+          <div className="ux-actions">
+            <button
+              className="ghost sm danger"
+              onClick={async () => {
+                if (!window.confirm(t("int.gDisconnectConfirm"))) return;
+                const res = await disconnectGoogle();
+                if (!res.ok) return toast(t("store.saveFailed"));
+                void reload();
+                toast(t("int.gDisconnected"));
+              }}
+            >
+              {t("int.gDisconnect")}
+            </button>
+          </div>
         </div>
       ) : configured === false ? (
-        <p className="mute">{t("int.gSetup")}</p>
+        <p className="st-demo-warn" style={{ margin: 0 }}>
+          <Info size={14} aria-hidden /> {t("int.gSetup")}
+        </p>
       ) : (
-        // Full page navigation: the server route sets the OAuth state cookie and redirects to Google
-        <a className="btn sm" href="/api/integrations/google/start">
-          {t("int.gConnect")}
-        </a>
+        <div className="ux-actions">
+          {/* Full page navigation: the server route sets the OAuth state cookie and redirects to Google */}
+          <a className="btn" href="/api/integrations/google/start">
+            {t("int.gConnect")}
+          </a>
+        </div>
       )}
-      <p className="mute" style={{ fontSize: 12, marginTop: 8 }}>
-        {t("int.gPrivacy")}
+      <p className="mute st-foot" style={{ marginTop: 0 }}>
+        <ShieldCheck size={14} aria-hidden /> {t("int.gPrivacy")}
       </p>
-    </div>
+    </section>
   );
 }
 

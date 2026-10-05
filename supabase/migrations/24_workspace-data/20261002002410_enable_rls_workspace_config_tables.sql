@@ -54,7 +54,7 @@ grant insert (id, workspace_id, name, query) on public.saved_filters to authenti
 grant update (name, query) on public.saved_filters to authenticated;
 
 grant select on public.workspace_settings to authenticated;
-grant update (brand_name, brand_color, sla_high_days, sla_medium_days, sla_low_days, ai_enabled, custom_domain) on public.workspace_settings to authenticated;
+grant update (brand_name, brand_color, brand_logo, sla_high_days, sla_medium_days, sla_low_days, ai_enabled, custom_domain) on public.workspace_settings to authenticated;
 
 grant select on public.user_preferences to authenticated;
 grant insert (digest_mode) on public.user_preferences to authenticated;

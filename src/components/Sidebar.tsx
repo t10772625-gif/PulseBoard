@@ -17,12 +17,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useStore, health } from "@/lib/store";
-import { pagePermissionFor } from "@/lib/permissions";
+import { pagePermissionsFor } from "@/lib/permissions";
 import { AI_GROUP, AUTOMATION_GROUP, INTEGRATION_GROUP, SETTINGS_GROUP, type NavGroup } from "@/lib/nav-groups";
 import { useT } from "@/i18n/I18nProvider";
 import type { MessageKey } from "@/i18n";
 import { ProjectId } from "@/types";
 import { Avatar } from "./ui";
+import { useBrand } from "./BrandEffect";
 
 type NavItem = { href: string; icon: LucideIcon; labelKey: MessageKey; match: string };
 
@@ -49,11 +50,17 @@ const inGroup = (pathname: string, g: NavGroup) => pathname === g.base || pathna
 type Tip = { label: string; top: number; left: number };
 
 export default function Sidebar() {
+  const brand = useBrand();
   const pathname = usePathname();
   const { tasks, notifications, projects, allowed, members, viewAsRole, workspaceName } = useStore();
   const { t } = useT();
   // RBAC: only show pages this role may open
-  const visible = (n: NavItem | NavGroup) => { const p = pagePermissionFor(isGroup(n) ? n.base : n.href); return !p || allowed(p); };
+  const pageOk = (href: string) => {
+    return pagePermissionsFor(href).every((k) => allowed(k));
+  };
+  // A group shows when its own page is allowed or any of its sub-pages is (Settings
+  // always has the personal pages); inside, only the allowed sub-pages are listed
+  const visible = (n: NavItem | NavGroup) => (isGroup(n) ? pageOk(n.base) || n.pages.some((sp) => pageOk(sp.href)) : pageOk(n.href));
   const me = members.me;
   const unread = notifications.filter((n) => n.unread).length;
   const [collapsed, setCollapsed] = useState(false);
@@ -156,7 +163,7 @@ export default function Sidebar() {
         </button>
         {open && (
           <div id={subId} className="nav-sub">
-            {g.pages.map((sp) => {
+            {g.pages.filter((sp) => pageOk(sp.href)).map((sp) => {
               const SubIcon = sp.icon;
               const subLabel = t(sp.labelKey);
               return (
@@ -188,8 +195,9 @@ export default function Sidebar() {
       </button>
       <div className="side-scroll">
         <div className="logo">
-          <b></b>
-          <span className="logo-text">PulseBoard</span>
+          {/* eslint-disable-next-line @next/next/no-img-element -- workspace logo is a checked data: URL */}
+          {brand.logo ? <img className="logo-img" src={brand.logo} alt="" width={30} height={30} /> : <b></b>}
+          <span className="logo-text">{brand.name}</span>
         </div>
         <small>{t("nav.main")}</small>
         <nav id="mn">{NAV.filter(visible).map(renderItem)}</nav>

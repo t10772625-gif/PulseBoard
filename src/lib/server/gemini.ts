@@ -7,7 +7,8 @@ import { z } from "zod";
 // The text is untrusted: instructions are in the system prompt, the answer must be
 // JSON matching a schema, and it is validated again with Zod before use.
 
-const DEFAULT_MODEL = "gemini-2.5-flash";
+// gemini-2.5-flash is closed to new API users (Google 404, 2026-10-05: "use gemini-3.8-flash")
+const DEFAULT_MODEL = "gemini-3.8-flash";
 
 export const geminiConfigured = () => !!process.env.GEMINI_API_KEY;
 
@@ -32,9 +33,14 @@ const TASK_SCHEMA = {
   required: ["title", "assignee", "due_in_days", "priority"],
 };
 
+// `detail` is Google's own short error text / finish reason, for the server log
+// only (never sent to the browser; it never contains the key)
 export class GeminiError extends Error {
-  constructor(public status: number) {
-    super(`Gemini HTTP ${status}`);
+  constructor(
+    public status: number,
+    public detail = "",
+  ) {
+    super(`Gemini HTTP ${status}${detail ? `: ${detail}` : ""}`);
   }
 }
 
@@ -48,17 +54,29 @@ async function generate(system: string, user: string, schema: object): Promise<u
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: "user", parts: [{ text: user }] }],
-      generationConfig: { temperature: 0.2, maxOutputTokens: 2048, responseMimeType: "application/json", responseSchema: schema },
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 4096,
+        responseMimeType: "application/json",
+        responseSchema: schema,
+        // Flash models "think" by default and those tokens count against maxOutputTokens,
+        // which can cut the JSON answer off. Drafting a task needs little thinking:
+        // 2.5 takes a token budget, Gemini 3+ takes a level.
+        ...(/^gemini-2\.5-flash/i.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : /flash/i.test(model) ? { thinkingConfig: { thinkingLevel: "low" } } : {}),
+      },
     }),
     signal: AbortSignal.timeout(20000),
   });
-  if (!res.ok) throw new GeminiError(res.status);
-  const out = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+  if (!res.ok) {
+    const err = (await res.json().catch(() => null)) as { error?: { status?: string; message?: string } } | null;
+    throw new GeminiError(res.status, `${err?.error?.status ?? ""} ${err?.error?.message ?? ""}`.trim().slice(0, 200));
+  }
+  const out = (await res.json()) as { candidates?: { finishReason?: string; content?: { parts?: { text?: string }[] } }[] };
   const text = out.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
   try {
     return JSON.parse(text);
   } catch {
-    throw new GeminiError(502);
+    throw new GeminiError(502, `unreadable answer (finishReason ${out.candidates?.[0]?.finishReason ?? "none"})`);
   }
 }
 
@@ -80,7 +98,7 @@ export async function extractActionItems(notes: string, people: string[], today:
     required: ["tasks"],
   });
   const parsed = z.object({ tasks: z.array(AiTask).max(20) }).safeParse(data);
-  if (!parsed.success) throw new GeminiError(502);
+  if (!parsed.success) throw new GeminiError(502, "answer did not match the task schema");
   return parsed.data.tasks;
 }
 
@@ -88,6 +106,6 @@ export async function extractActionItems(notes: string, people: string[], today:
 export async function sentenceToTask(sentence: string, people: string[], today: string): Promise<AiTask> {
   const data = await generate(RULES(people, today) + "\nReturn exactly one task.", sentence, TASK_SCHEMA);
   const parsed = AiTask.safeParse(data);
-  if (!parsed.success) throw new GeminiError(502);
+  if (!parsed.success) throw new GeminiError(502, "answer did not match the task schema");
   return parsed.data;
 }

@@ -1,5 +1,7 @@
 "use client";
 import { useStore } from "@/lib/store";
+import { Archive, Trash2 } from "lucide-react";
+import { EmptyState } from "@/components/ui";
 import { useT } from "@/i18n/I18nProvider";
 
 // Archived tasks (CORE-21) and recently deleted tasks (CORE-22)
@@ -38,7 +40,7 @@ export default function ArchivePage() {
               </div>
             ))
           ) : (
-            <p className="mute">{tt("archive.nothing")}</p>
+            <EmptyState compact icon={<Archive size={26} />} title={tt("archive.nothing")} />
           )}
         </div>
         <div className="card">
@@ -79,7 +81,7 @@ export default function ArchivePage() {
               </div>
             ))
           ) : (
-            <p className="mute">{tt("archive.trashEmpty")}</p>
+            <EmptyState compact icon={<Trash2 size={26} />} title={tt("archive.trashEmpty")} />
           )}
         </div>
       </div>

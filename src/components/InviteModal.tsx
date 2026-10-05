@@ -18,9 +18,9 @@ export default function InviteModal() {
 // Real mode: pre-approve an email with a role. No email is sent yet (no SMTP);
 // the admin tells the person to register with this exact email.
 function GrantAccess({ onClose }: { onClose: () => void }) {
-  const { addInvite, myRole, workspaceName } = useStore();
+  const { addInvite, myRole, workspaceName, isCreator } = useStore();
   const { t: tt, rich } = useT();
-  const roles = assignableRoles(myRole);
+  const roles = assignableRoles(myRole, isCreator);
   const [role, setRole] = useState<Member["role"]>("Member");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ email: string; role: Member["role"] } | null>(null);

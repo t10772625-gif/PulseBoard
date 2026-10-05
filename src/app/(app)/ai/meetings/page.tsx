@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { CalendarCheck, CalendarClock, Clock, Info, Users } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { AI_GROUP, AI_PAGES } from "@/lib/nav-groups";
 import { freeBusy, googleConnectedMembers } from "@/lib/integrations";
@@ -8,6 +9,7 @@ import { MemberId } from "@/types";
 import Dropdown from "@/components/Dropdown";
 import Gate from "@/components/Gate";
 import SubPageHeader from "@/components/SubPageHeader";
+import { FeatureHero, HowItWorks, SecHead } from "@/components/FeaturePage";
 import { useProjectPicker } from "@/components/ProjectPicker";
 import { useT } from "@/i18n/I18nProvider";
 
@@ -19,7 +21,8 @@ const HOURS = [9, 10, 11, 12, 13, 14, 15, 16];
 // calendars people connected themselves (Integrations → Email); anyone not connected
 // counts as unknown, and you can always pick the time by hand. Demo: sample calendars.
 export default function AiMeetings() {
-  const { members, createTask, toast, canEdit, realMode, workspaceId, myUserId } = useStore();
+  const { members, createTask, toast, allowed, realMode, workspaceId, myUserId } = useStore();
+  const canCreate = allowed("task.create");
   const { t: tt, rich, fmt } = useT();
   const { project, picker, ready } = useProjectPicker();
   const hourLabel = (h: number) => fmt.time(new Date(2026, 0, 1, h), { hour: "numeric", minute: "2-digit" });
@@ -71,41 +74,81 @@ export default function AiMeetings() {
 
   return (
     <>
-      <SubPageHeader group={AI_GROUP} page={AI_PAGES[4]} hint={tt("aiPage.hint")} actions={picker} />
-      <div className="grid g2">
-        <div className="card">
-          <h2>{tt("aiPage.scheduler")}</h2>
+      <SubPageHeader group={AI_GROUP} page={AI_PAGES[4]} hint={tt("aiPage.hint")} />
+      <div className="ux-page">
+        <FeatureHero
+          id="mt-hero"
+          icon={CalendarClock}
+          title={tt("mt.heroTitle")}
+          text={realMode ? tt("mt.heroTextReal") : tt("mt.heroTextDemo")}
+          status={realMode ? "available" : "setup"}
+          statusText={realMode ? tt("ux.ruleBased") : tt("mt.demoCalendars")}
+          planId="AI-22"
+        >
+          <div className="ux-pills">{picker}</div>
+        </FeatureHero>
+        <HowItWorks
+          id="mt-how"
+          steps={[
+            { title: tt("mt.s1"), text: tt("mt.s1t") },
+            { title: tt("mt.s2"), text: tt("mt.s2t") },
+            { title: tt("mt.s3"), text: tt("mt.s3t") },
+          ]}
+        />
+
+        <section className="card ux-sec" aria-labelledby="mt-tool">
+          <SecHead id="mt-tool" icon={CalendarCheck} title={tt("aiPage.scheduler")}>
+            <span className="ux-conf">{tt("mt.tomorrow")}</span>
+          </SecHead>
           <Gate id="AI-22">
-            <div className="pill-row" style={{ marginBottom: 8 }}>
-              {(Object.keys(members) as MemberId[]).map((m) => (
-                <label key={m} className="inline" title={realMode && connected.includes(uid(m)) ? tt("aiPage.calConnected") : undefined}>
-                  <input type="checkbox" checked={invitees.includes(m)} onChange={() => setInvitees((v) => (v.includes(m) ? v.filter((x) => x !== m) : [...v, m]))} />
-                  {members[m].name.split(" ")[0]}
-                  {realMode && connected.includes(uid(m)) ? " 📅" : ""}
+            <div className="ux-form">
+              <div className="ux-sec" style={{ gap: 8 }}>
+                <b style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13 }}>
+                  <Users size={16} aria-hidden /> {tt("mt.invitees")}
+                </b>
+                <div className="pill-row">
+                  {(Object.keys(members) as MemberId[]).map((m) => (
+                    <label key={m} className="inline" title={realMode && connected.includes(uid(m)) ? tt("aiPage.calConnected") : undefined}>
+                      <input type="checkbox" checked={invitees.includes(m)} onChange={() => setInvitees((v) => (v.includes(m) ? v.filter((x) => x !== m) : [...v, m]))} />
+                      {members[m].name.split(" ")[0]}
+                      {realMode && connected.includes(uid(m)) ? " 📅" : ""}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="ux-result" style={{ marginTop: 0 }}>
+                <span className="ux-actor">
+                  <Clock size={16} aria-hidden /> {suggested !== undefined ? <span>{rich("aiPage.freeAt", { time: hourLabel(suggested) })}</span> : <span>{tt("aiPage.noFree")}</span>}
+                </span>
+                {realMode && invitees.length > known.length && (
+                  <p className="mute" style={{ margin: 0, fontSize: 12 }}>
+                    {tt("aiPage.unknownBusy", { n: invitees.length - known.length })}
+                  </p>
+                )}
+              </div>
+
+              <div className="ux-inline">
+                <label style={{ flex: "0 1 220px" }}>
+                  {tt("aiPage.pickTime")}
+                  <Dropdown value={String(slot ?? "")} onChange={(v) => setManualHour(Number(v))} options={HOURS.map((h) => ({ value: String(h), label: hourLabel(h) }))} />
                 </label>
-              ))}
+                {slot !== undefined && canCreate && (
+                  <button
+                    className="btn"
+                    disabled={!ready}
+                    onClick={() => {
+                      createTask({ projectId: project, title: tt("aiPage.meetingTitle", { time: hourLabel(slot) }), dueOffset: 1, labels: ["Meeting"], description: tt("aiPage.invitees", { names: invitees.map((m) => members[m].name).join(", ") }) });
+                      toast(tt("aiPage.meetingAdded"));
+                    }}
+                  >
+                    <CalendarCheck size={16} aria-hidden /> {tt("aiPage.book")}
+                  </button>
+                )}
+              </div>
             </div>
-            {suggested !== undefined ? <p>{rich("aiPage.freeAt", { time: hourLabel(suggested) })}</p> : <p>{tt("aiPage.noFree")}</p>}
-            {realMode && invitees.length > known.length && <p className="mute" style={{ fontSize: 12 }}>{tt("aiPage.unknownBusy", { n: invitees.length - known.length })}</p>}
-            <label className="inline" style={{ marginTop: 8 }}>
-              {tt("aiPage.pickTime")}
-              <Dropdown value={String(slot ?? "")} onChange={(v) => setManualHour(Number(v))} options={HOURS.map((h) => ({ value: String(h), label: hourLabel(h) }))} />
-            </label>
-            {slot !== undefined && canEdit && (
-              <button
-                className="btn sm"
-                disabled={!ready}
-                style={{ marginTop: 8 }}
-                onClick={() => {
-                  createTask({ projectId: project, title: tt("aiPage.meetingTitle", { time: hourLabel(slot) }), dueOffset: 1, labels: ["Meeting"], description: tt("aiPage.invitees", { names: invitees.map((m) => members[m].name).join(", ") }) });
-                  toast(tt("aiPage.meetingAdded"));
-                }}
-              >
-                {tt("aiPage.book")}
-              </button>
-            )}
-            <p className="mute" style={{ fontSize: 12, marginTop: 6 }}>
-              {realMode ? tt("aiPage.realCalendars") : tt("aiPage.demoCalendars")}{" "}
+            <p className="mute st-foot">
+              <Info size={14} aria-hidden /> {realMode ? tt("aiPage.realCalendars") : tt("aiPage.demoCalendars")}{" "}
               {realMode && (
                 <Link className="link" href="/integrations/email">
                   {tt("aiPage.connectCalendar")}
@@ -113,7 +156,7 @@ export default function AiMeetings() {
               )}
             </p>
           </Gate>
-        </div>
+        </section>
       </div>
     </>
   );

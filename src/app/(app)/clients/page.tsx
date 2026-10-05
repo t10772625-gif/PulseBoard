@@ -6,12 +6,14 @@ import { Client, ProjectId } from "@/types";
 import Dropdown from "@/components/Dropdown";
 import Gate from "@/components/Gate";
 import { EmptyState } from "@/components/ui";
+import { CheckCheck } from "lucide-react";
 import { download } from "@/lib/csv";
 import { useT } from "@/i18n/I18nProvider";
 
 export default function Clients() {
   const { clients, addClient, updateClient, projects, tasks, branding, createShareLink, toast, openDrawer, updateTask, can, allowed } = useStore();
-  const canEdit = allowed("client.manage");
+  const canCreate = allowed("client.create");
+  const canEdit = allowed("client.edit");
   const { t: tt, fmt } = useT();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -86,7 +88,7 @@ export default function Clients() {
                   {tt("common.project")}
                   <Dropdown value={projectId} onChange={setProjectId} options={Object.keys(projects).map((p) => ({ value: p, label: projects[p].name }))} />
                 </label>
-                <button className="btn" disabled={!canEdit}>
+                <button className="btn" disabled={!canCreate}>
                   {tt("clients.onboardBtn")}
                 </button>
                 <p className="mute" style={{ fontSize: 12 }}>{tt("clients.onboardNote")}</p>
@@ -113,7 +115,7 @@ export default function Clients() {
                   </div>
                 ))
               ) : (
-                <p className="mute">{tt("clients.noPending")}</p>
+                <EmptyState compact icon={<CheckCheck size={26} />} title={tt("clients.noPending")} />
               )}
             </Gate>
           </div>

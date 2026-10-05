@@ -1,6 +1,7 @@
 "use client";
 import { DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { isMine } from "@/lib/permissions";
 import { useStore, health, isBlocked } from "@/lib/store";
 import { dateForOffset, TODAY } from "@/lib/mock-data";
 import { eisenhower, parseQuery, workloadReport } from "@/lib/ai";
@@ -85,6 +86,7 @@ export default function ProjectBoard() {
     saveFilter,
     can,
     canEdit,
+    canTask,
     allowed,
   } = store;
   const { t: tt, rich } = useT();
@@ -140,7 +142,7 @@ export default function ProjectBoard() {
 
   const filtered = tasks
     .filter((t) => t.projectId === id)
-    .filter((t) => !boardFilters.mine || t.assignee === "me")
+    .filter((t) => !boardFilters.mine || isMine(t))
     .filter((t) => !boardFilters.high || t.priority === "h")
     .filter((t) => !boardFilters.blk || isBlocked(t, tasks))
     .filter((t) => boardFilters.assignees.length === 0 || boardFilters.assignees.includes(t.assignee))
@@ -149,10 +151,10 @@ export default function ProjectBoard() {
   function dropOnColumn(status: Status, e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
     e.currentTarget.classList.remove("over");
-    if (!canEdit) return toast(tt("board.cantMove"));
     const taskId = e.dataTransfer.getData("text/plain");
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
+    if (!canTask("move", task)) return toast(tt("board.cantMove"));
     if (status === "done" && isBlocked(task, tasks)) {
       const blocker = tasks.find((t) => t.id === task.blockedBy);
       toast(tt("board.blockedBy", { title: blocker?.title ?? "" }));
@@ -235,7 +237,7 @@ export default function ProjectBoard() {
         <button className="ghost" onClick={() => setMenuOpen(true)}>
           {tt("board.importTemplates")}
         </button>
-        {view === "board" && allowed("project.manage") && (
+        {view === "board" && allowed("column.create") && (
           <button className="ghost" onClick={() => openAddColumnModal(id)}>
             ＋ {tt("board.addColumn")}
           </button>

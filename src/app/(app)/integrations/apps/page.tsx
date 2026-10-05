@@ -34,7 +34,7 @@ const STATUS_KEY: Record<Status, MessageKey> = {
 // Real status of each connection (demo mode keeps the old preview toggles)
 export default function IntegrationApps() {
   const { integrations, toggleIntegration, can, canEdit: canEditTasks, allowed, realMode, workspaceId } = useStore();
-  const canEdit = canEditTasks && allowed("automation.manage");
+  const canEdit = canEditTasks && allowed("integration.connect");
   const { t: tt } = useT();
   const [setup, setSetup] = useState<ServerSetup | null>(null);
   const [hooks, setHooks] = useState<ChatWebhook[]>([]);
@@ -62,12 +62,15 @@ export default function IntegrationApps() {
         {CATALOG.map((c) => {
           const st = realMode ? status(c.key) : null;
           return (
-            <div key={c.key} className="card">
-              <div className="meta">
-                <b>
-                  {c.name}
-                  <PlanTag id={c.feature} />
-                </b>
+            <div key={c.key} className="card ux-card-col">
+              <div className="ux-card-top">
+                <span className="ux-icon sm" aria-hidden>
+                  <b>{c.name.charAt(0)}</b>
+                </span>
+                <b>{c.name}</b>
+              </div>
+              <div className="ux-pills">
+                <PlanTag id={c.feature} />
                 {st ? (
                   <span className={`int-st ${st}`}>{tt(STATUS_KEY[st])}</span>
                 ) : (
@@ -76,28 +79,30 @@ export default function IntegrationApps() {
                   </button>
                 )}
               </div>
-              <p className="mute" style={{ fontSize: 13, marginTop: 6 }}>
+              <p className="mute" style={{ fontSize: 13 }}>
                 {tt(c.desc)}
               </p>
               {c.key === "gmail" && google && (
-                <p className="mute" style={{ fontSize: 12, marginTop: 4 }} dir="ltr">
+                <p className="mute" style={{ fontSize: 12 }} dir="ltr">
                   {google.account_email}
                 </p>
               )}
               {(c.key === "slack" || c.key === "discord") && hooks.some((h) => h.kind === c.key) && (
-                <p className="mute" style={{ fontSize: 12, marginTop: 4 }}>
+                <p className="mute" style={{ fontSize: 12 }}>
                   {tt("int.channels", { n: hooks.filter((h) => h.kind === c.key).length })}
                 </p>
               )}
               {c.note && (
-                <p className="mute" style={{ fontSize: 11, marginTop: 4 }}>
+                <p className="mute" style={{ fontSize: 11 }}>
                   ⚠️ {tt(c.note)}
                 </p>
               )}
               {realMode && c.href && can(c.feature) && (
-                <Link className="ghost sm" href={c.href} style={{ marginTop: 8, display: "inline-block" }}>
-                  {tt("int.manage")}
-                </Link>
+                <div className="ux-foot">
+                  <Link className="ghost sm" href={c.href}>
+                    {tt("int.manage")}
+                  </Link>
+                </div>
               )}
             </div>
           );

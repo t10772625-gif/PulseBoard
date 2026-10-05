@@ -28,15 +28,16 @@ function heatColor(v: number) {
 }
 
 export default function Team() {
-  const { members, tasks, setMemberRole, vote, setVote, toast, openInviteModal, capacity, setCapacity, history, allowed, myRole, realMode, invites, refreshInvites, revokeInvite, creatorId } = useStore();
-  const canManage = allowed("member.manage");
+  const { members, tasks, setMemberRole, vote, setVote, toast, openInviteModal, capacity, setCapacity, history, allowed, myRole, realMode, invites, refreshInvites, revokeInvite, creatorId, isCreator } = useStore();
+  const canInvite = allowed("member.invite");
+  const canManage = allowed("member.edit");
   const { t: tt, fmt } = useT();
   // Mon–Fri names in the current language (5 Jan 2026 was a Monday)
   const weekdays = Array.from({ length: WEEKDAY_COUNT }, (_, i) => fmt.date(new Date(2026, 0, 5 + i), { weekday: "short" }));
 
   useEffect(() => {
-    if (realMode && canManage) void refreshInvites();
-  }, [realMode, canManage, refreshInvites]);
+    if (realMode && canInvite) void refreshInvites();
+  }, [realMode, canInvite, refreshInvites]);
 
   // Real mode: hours per weekday = estimates of open tasks due that day this week.
   // Demo mode keeps the sample workload.
@@ -58,14 +59,14 @@ export default function Team() {
             {realMode ? ` ${tt("team.hintReal")}` : ""}
           </p>
         </div>
-        {canManage && (
+        {canInvite && (
           <button className="ghost" onClick={openInviteModal}>
             {tt("team.invite")}
           </button>
         )}
       </div>
 
-      {realMode && canManage && invites.length > 0 && (
+      {realMode && canInvite && invites.length > 0 && (
         <div className="card" style={{ marginBottom: 18 }}>
           <h2>{tt("team.pending")}</h2>
           <p className="mute" style={{ fontSize: 12, marginBottom: 8 }}>
@@ -114,7 +115,6 @@ export default function Team() {
                 <Avatar id={k} large />
                 <div>
                   <b>{members[k].name}</b>
-                  {k === creatorId && <span className="chip" style={{ marginInlineStart: 6 }} title={tt("team.creatorHint")}>{tt("team.creator")}</span>}
                   <br />
                   <Dropdown
                     value={members[k].role}
@@ -124,8 +124,8 @@ export default function Team() {
                     }}
                     // Only an Admin grants or changes Admin; nobody changes their own role, and the
                     // workspace creator's role can't be changed (same rules in the database)
-                    disabled={!canManage || k === "me" || k === creatorId || !assignableRoles(myRole).includes(members[k].role)}
-                    options={(assignableRoles(myRole).includes(members[k].role) ? assignableRoles(myRole) : [members[k].role]).map((r) => ({ value: r, label: tt(`role.${r}`) }))}
+                    disabled={!canManage || k === "me" || k === creatorId || !assignableRoles(myRole, isCreator).includes(members[k].role)}
+                    options={(assignableRoles(myRole, isCreator).includes(members[k].role) ? assignableRoles(myRole, isCreator) : [members[k].role]).map((r) => ({ value: r, label: tt(`role.${r}`) }))}
                     triggerStyle={{ padding: "3px 8px", fontSize: 12, marginTop: 4, width: "auto" }}
                   />
                 </div>

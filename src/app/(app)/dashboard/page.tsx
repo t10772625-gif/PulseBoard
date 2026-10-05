@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { isMine } from "@/lib/permissions";
 import { useStore, health, isBlocked } from "@/lib/store";
 import { nextActions } from "@/lib/ai";
 import { TODAY, dateForOffset } from "@/lib/mock-data";
@@ -27,7 +28,7 @@ export default function Dashboard() {
   const router = useRouter();
   const [hidden, setHidden] = useState<WidgetId[]>([]);
   const [customizing, setCustomizing] = useState(false);
-  const mine = tasks.filter((t) => t.assignee === "me" && t.status !== "done").sort((a, b) => a.dueOffset - b.dueOffset);
+  const mine = tasks.filter((t) => isMine(t) && t.status !== "done").sort((a, b) => a.dueOffset - b.dueOffset);
 
   // Widget visibility is a per-browser preference (VIEW-09)
   useEffect(() => {

@@ -6,7 +6,7 @@ import { DISCORD_WEBHOOK, SLACK_WEBHOOK, webhookHint } from "@/lib/server/outbou
 
 // Connect a Slack or Discord channel through its incoming-webhook URL. The URL is
 // encrypted here and only the ciphertext is stored (25_integrations …2500). The
-// insert runs as the caller, so RLS requires automation.manage in that workspace.
+// insert runs as the caller, so RLS requires integration.connect in that workspace (26_granular-permissions).
 // Removing a webhook is a plain delete from the app (same permission).
 
 const EVENTS = ["task.created", "task.done", "task.high", "task.assigned"] as const;

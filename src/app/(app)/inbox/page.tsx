@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { EmptyState } from "@/components/ui";
+import { Activity } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useT } from "@/i18n/I18nProvider";
 
@@ -73,9 +74,7 @@ export default function Inbox() {
               </button>
             ))
           ) : (
-            <p className="mute" style={{ padding: "12px 0" }}>
-              {tt("inbox.noActivity")}
-            </p>
+            <EmptyState compact icon={<Activity size={26} />} title={tt("inbox.noActivity")} />
           ))}
       </div>
     </>

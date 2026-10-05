@@ -69,7 +69,9 @@ function validWebhook(u: string) {
 
 export default function AutomationRules() {
   const { rules, addRule, toggleRule, removeRule, runOverdueRules, toast, allowed } = useStore();
-  const canEdit = allowed("automation.manage");
+  const canCreate = allowed("automation.create");
+  const canEdit = allowed("automation.edit");
+  const canDelete = allowed("automation.delete");
   const { t: tt, rich } = useT();
   const [text, setText] = useState("");
   const [trigger, setTrigger] = useState<AutomationRule["trigger"]>("priority_high");
@@ -109,7 +111,7 @@ export default function AutomationRules() {
             )}
             <button
               className="btn sm"
-              disabled={!parsed || !canEdit}
+              disabled={!parsed || !canCreate}
               onClick={() => {
                 if (parsed) add(parsed);
                 setText("");
@@ -140,7 +142,7 @@ export default function AutomationRules() {
             <button
               className="ghost sm"
               style={{ marginTop: 8 }}
-              disabled={!canEdit}
+              disabled={!canCreate}
               onClick={() => {
                 add({ name: `${tt("auto.ruleName", { trigger: tt(TRIGGERS[trigger]), action: tt(ACTIONS[action]) })}${param ? ` (${param})` : ""}`, trigger, action, param: param || undefined, active: true });
                 setParam("");
@@ -175,7 +177,7 @@ export default function AutomationRules() {
                     </span>
                   </span>
                 </span>
-                <button className="ghost sm danger" disabled={!canEdit} onClick={() => removeRule(r.id)}>
+                <button className="ghost sm danger" disabled={!canDelete} onClick={() => removeRule(r.id)}>
                   {tt("common.remove")}
                 </button>
               </div>
